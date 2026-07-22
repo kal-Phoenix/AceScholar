@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Clock, Calendar, ChevronUp, ChevronDown } from 'lucide-react';
+import { Clock } from 'lucide-react';
 
 interface IosDateTimePickerProps {
   value: string; // YYYY-MM-DDTHH:mm
@@ -226,19 +226,6 @@ export default function IosDateTimePicker({ value, onChange }: IosDateTimePicker
     if (clampedIdx !== currentIdx) {
       setIdx(clampedIdx);
     }
-  };
-
-  // manual alignment buttons nudge
-  const nudgeIndex = (
-    currentIdx: number,
-    setIdx: (idx: number) => void,
-    direction: 'up' | 'down',
-    maxIdx: number
-  ) => {
-    let nextIdx = direction === 'up' ? currentIdx - 1 : currentIdx + 1;
-    if (nextIdx < 0) nextIdx = 0;
-    if (nextIdx > maxIdx) nextIdx = maxIdx;
-    setIdx(nextIdx);
   };
 
   const getInteractionHandlers = (key: 'month' | 'day' | 'year' | 'hour' | 'minute' | 'ampm') => {

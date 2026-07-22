@@ -2,11 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   GraduationCap, Clock, AlertCircle, RefreshCw, Send, CheckCircle2, 
   MessageSquare, Download, FileText, Save, Check, Paperclip, 
-  ClipboardList, Sparkles, User, UserCheck, Calendar, ArrowRight, X,
+  ClipboardList, Sparkles, UserCheck, Calendar, X,
   Coins, DollarSign, TrendingUp
 } from 'lucide-react';
 import { PageType, Profile, Order as AcademicOrder, Message, Payment } from '../types';
-import { fallbackDb, supabase } from '../lib/supabase';
+import { fallbackDb } from '../lib/supabase';
 
 interface ExpertProps {
   user: Profile | null;
@@ -18,7 +18,6 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
   const [assignedOrders, setAssignedOrders] = useState<AcademicOrder[]>([]);
   const [availableOrders, setAvailableOrders] = useState<AcademicOrder[]>([]);
   const [activeTab, setActiveTab] = useState<'assigned' | 'available' | 'earnings'>('assigned');
-  const [isLoading, setIsLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<AcademicOrder | null>(null);
   
   // New simplified workbench sub-tabs
@@ -56,21 +55,21 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
     }
   };
 
-  // Upload delivery file to Supabase Storage and return public URL
-  const uploadDeliveryFile = async (file: File, orderId: string): Promise<string | null> => {
-    if (!supabase) return null;
-    const ext = file.name.split('.').pop();
-    const path = `deliveries/${orderId}/${Date.now()}.${ext}`;
-    const { error } = await supabase.storage.from('order-files').upload(path, file, {
-      contentType: file.type,
-      upsert: true,
+  // Upload delivery file via backend API (uses service role, not anon key)
+  const uploadDeliveryFile = async (file: File): Promise<string | null> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64 = reader.result as string;
+        const url = await fallbackDb.uploadFile(base64, file.name);
+        resolve(url);
+      };
+      reader.onerror = () => {
+        console.error('Failed to read file');
+        resolve(null);
+      };
+      reader.readAsDataURL(file);
     });
-    if (error) {
-      console.error('Storage upload error:', error.message);
-      return null;
-    }
-    const { data: urlData } = supabase.storage.from('order-files').getPublicUrl(path);
-    return urlData?.publicUrl || null;
   };
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -107,12 +106,12 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
 
   const fetchExpertOrders = async () => {
     if (!user) return;
-    setIsLoading(true);
     try {
-      const [allOrders, allPayments] = await Promise.all([
-        fallbackDb.getOrders(),
+      const [ordersResult, allPayments] = await Promise.all([
+        fallbackDb.getOrders(1, 500),
         fallbackDb.getPayments()
       ]);
+      const allOrders = ordersResult.data;
       
       const clean = (str: string) => {
         return str
@@ -174,38 +173,39 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
       console.error('Error fetching expert orders:', e);
       if (showToast) showToast('Failed to load assignments.', 'error');
     } finally {
-      setIsLoading(false);
     }
   };
 
 
 
-  const handleClaimOrder = async (orderId: string) => {
+  const handleApplyOrder = async (orderId: string) => {
     if (!user) return;
     setIsApplying(true);
     try {
-      await fallbackDb.updateOrder(orderId, {
-        assigned_to: user.full_name,
-        expert_accepted: true,
-        status: 'in_progress',
+      // Add expert as applicant — admin must approve before assignment
+      const res = await fetch(`/api/orders/${orderId}/apply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${JSON.parse(localStorage.getItem('ace_scholar_current_user') || '{}').access_token}` },
+        body: JSON.stringify({ expert_email: user.email, expert_name: user.full_name }),
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
 
       await fallbackDb.postMessage({
         order_id: orderId,
-        sender_id: 'system',
-        sender_name: 'Ace Scholar System',
-        content: `🎉 Academic specialist allocated! Expert ${user.full_name} has claimed this task. They are now working on your project guidelines.`,
+        sender_id: user.id,
+        sender_name: user.full_name,
+        content: `📝 Application submitted: Expert ${user.full_name} has applied for this project. Awaiting admin coordinator approval.`,
         is_admin: true,
       });
 
-      if (showToast) showToast('Order claimed successfully! Active drafting started.', 'success');
-      
-      // Select the order and switch tabs immediately
-      setActiveTab('assigned');
+      if (showToast) showToast('Application submitted! Awaiting admin approval.', 'success');
       await fetchExpertOrders();
     } catch (e) {
-      console.error('Error claiming order:', e);
-      if (showToast) showToast('Failed to claim order.', 'error');
+      console.error('Error applying to order:', e);
+      if (showToast) showToast('Failed to submit application.', 'error');
     } finally {
       setIsApplying(false);
     }
@@ -229,7 +229,8 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
 
   const fetchMessagesForOrder = async (orderId: string) => {
     try {
-      const allMessages = await fallbackDb.getMessages();
+      const result = await fallbackDb.getMessages(1, 500);
+      const allMessages = result.data;
       const thread = allMessages.filter(m => m.order_id === orderId);
       thread.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
       setMessages(thread);
@@ -935,11 +936,9 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
                                         // Try Supabase Storage first; fall back to base64 inline for files ≤ 5 MB
                                         let deliveryUrl = '#';
                                         if (selectedDeliveryFile) {
-                                          if (supabase) {
-                                            const url = await uploadDeliveryFile(selectedDeliveryFile, selectedOrder.id);
-                                            if (url) deliveryUrl = url;
-                                          }
-                                          // If Storage upload failed and file is small enough, store as base64
+                                          const url = await uploadDeliveryFile(selectedDeliveryFile);
+                                          if (url) deliveryUrl = url;
+                                          // If API upload failed and file is small enough, store as base64
                                           if (deliveryUrl === '#' && selectedDeliveryFile.size <= 5 * 1024 * 1024) {
                                             await new Promise<void>((resolve) => {
                                               const reader = new FileReader();
@@ -1021,19 +1020,19 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
                         </div>
 
                         <button
-                          onClick={() => handleClaimOrder(selectedOrder.id)}
+                          onClick={() => handleApplyOrder(selectedOrder.id)}
                           disabled={isApplying}
                           className="w-full sm:w-auto bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-black text-xs py-3 px-6 rounded-xl transition-all flex items-center justify-center space-x-2 shadow-lg hover:shadow-amber-500/10 cursor-pointer"
                         >
                           {isApplying ? (
                             <>
                               <RefreshCw className="h-4 w-4 animate-spin" />
-                              <span>Allocating Project...</span>
+                              <span>Submitting Application...</span>
                             </>
                           ) : (
                             <>
                               <CheckCircle2 className="h-4 w-4 text-slate-950" />
-                              <span>Claim & Start Drafting</span>
+                              <span>Apply for This Project</span>
                             </>
                           )}
                         </button>

@@ -1,4 +1,4 @@
-# Ace Academic
+# AceScholar
 
 Elite academic writing, technical drafting, and programming solutions platform.
 

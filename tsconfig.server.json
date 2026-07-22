@@ -9,10 +9,10 @@
     "allowSyntheticDefaultImports": true,
     "skipLibCheck": true,
     "strict": true,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["server.ts", "server/**/*.ts"]
+  "include": ["server/**/*.ts"]
 }

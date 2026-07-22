@@ -89,10 +89,6 @@ export default function Footer({ setCurrentPage }: FooterProps) {
             &copy; {new Date().getFullYear()} AceScholar. All rights reserved.
           </div>
           <div className="flex space-x-4">
-            <span className="hover:text-slate-400 cursor-pointer">Terms of Service</span>
-            <span>&bull;</span>
-            <span className="hover:text-slate-400 cursor-pointer">Privacy Policy</span>
-            <span>&bull;</span>
             <span>Ethiopia Office serving clients worldwide 24/7</span>
           </div>
         </div>

@@ -188,10 +188,10 @@ export default function Login({ setCurrentPage, setUser, showToast, redirectPage
               <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider">Password</label>
               <button
                 type="button"
-                onClick={() => showToast && showToast('Password reset link is currently unavailable.', 'error')}
-                className="text-[10px] text-amber-500 hover:underline hover:text-amber-400 font-semibold focus:outline-none cursor-pointer"
+                onClick={() => setCurrentPage('forgot-password')}
+                className="text-[10px] text-amber-500 hover:text-amber-400 font-semibold cursor-pointer hover:underline"
               >
-                Forgot password?
+                Forgot Password?
               </button>
             </div>
             <div className="relative">

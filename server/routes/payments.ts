@@ -1,27 +1,10 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
-import { db, supabaseAdmin, supabaseUrl } from '../lib/supabase.js';
-import { safeString, InputError } from '../lib/validation.js';
-import { generatePaymentId, deriveRole } from '../lib/utils.js';
+import { paymentConfig, generatePaymentId, getRequesterProfile } from '../lib/utils.js';
+import { db } from '../lib/supabase.js';
+import { safeString } from '../lib/validation.js';
 
 const router = Router();
-
-async function getRequesterProfile(req: Request): Promise<any> {
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.slice(7);
-    if (token) {
-      const { supabase } = await import('../lib/supabase.js');
-      const { data: { user: authUser }, error } = await supabase.auth.getUser(token);
-      if (error || !authUser) return null;
-      const email = authUser.email?.toLowerCase().trim();
-      if (!email) return null;
-      const role = deriveRole(email, authUser.user_metadata?.role);
-      return { id: authUser.id, email, full_name: authUser.user_metadata?.full_name || email.split('@')[0], role, created_at: authUser.created_at };
-    }
-  }
-  return null;
-}
 
 async function processPaymentRecord({
   order_id, provider_id, amount, currency, reference_id, phone_number
@@ -49,7 +32,7 @@ async function processPaymentRecord({
     admin_cut,
     expert_amount,
     currency,
-    status: 'completed',
+    status: 'pending',
     reference_id,
     phone_number: phone_number || null,
     created_at: new Date().toISOString(),
@@ -62,19 +45,12 @@ async function processPaymentRecord({
     throw new Error('Failed to record payment');
   }
 
-  const { data: currentOrder } = await db.from('orders').select('status').eq('id', order_id).maybeSingle();
-  const currentStatus = currentOrder?.status || 'pending';
-
   const orderUpdates: Record<string, any> = {
-    payment_status: 'approved',
+    payment_status: 'pending',
     payment_method: provider_id,
     payment_ref_number: reference_id,
     payment_id: payId
   };
-
-  if (currentStatus === 'pending') {
-    orderUpdates.status = 'in_progress';
-  }
 
   const { error: updateErr } = await db.from('orders').update(orderUpdates).eq('id', order_id);
   if (updateErr) {
@@ -108,6 +84,12 @@ router.post('/', async (req: Request, res: Response) => {
 
     const order = orderData as any;
 
+    // Verify the authenticated user owns this order
+    if (requester.role === 'client' &&
+        order.client_email?.toLowerCase() !== requester.email.toLowerCase()) {
+      return res.status(403).json({ error: 'You can only submit payments for your own orders' });
+    }
+
     if (payment_screenshot) {
       // Store screenshot, mark payment as pending for admin review
       const { error: updateErr } = await db.from('orders').update({
@@ -121,18 +103,23 @@ router.post('/', async (req: Request, res: Response) => {
 
     const finalAmount = amount !== undefined && !isNaN(amount) && amount >= 0 ? amount : (order.total_amount || 100);
     const finalCurrency = currency || order.currency || 'USD';
-    const referenceId = `${provider_id.toUpperCase()}-REF-${Math.floor(10000 + Math.random() * 90000)}-X`;
+    const referenceId = `${provider_id.toUpperCase()}-REF-${crypto.randomUUID().replace(/-/g, '').substring(0, 12)}`;
 
     const payment = await processPaymentRecord({
       order_id, provider_id, amount: finalAmount, currency: finalCurrency,
       reference_id: referenceId, phone_number: phone_number || null
     });
 
-    res.json({ success: true, status: 'completed', reference_id: referenceId, payment });
+    res.json({ success: true, status: 'pending', reference_id: referenceId, payment });
   } catch (err: any) {
     console.error('POST /api/payments exception:', err);
-    res.status(500).json({ error: err.message || 'Internal server error during payment processing' });
+    res.status(500).json({ error: 'Internal server error during payment processing' });
   }
+});
+
+// GET payment configuration (public — no auth required)
+router.get('/config', (_req: Request, res: Response) => {
+  res.json(paymentConfig());
 });
 
 // GET all payments (admin only)

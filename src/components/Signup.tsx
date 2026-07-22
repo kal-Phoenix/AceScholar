@@ -345,7 +345,7 @@ function EmailVerificationScreen({
           <p className="text-[11px] font-bold text-slate-300 uppercase tracking-widest">What to do next</p>
           {[
             { step: '1', text: 'Open your email inbox' },
-            { step: '2', text: 'Find the email from AceAcademic / Supabase' },
+            { step: '2', text: 'Find the email from AceScholar' },
             { step: '3', text: 'Click the "Confirm your email" link' },
             { step: '4', text: 'Return here and sign in to your account' },
           ].map(({ step, text }) => (

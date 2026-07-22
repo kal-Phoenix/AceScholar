@@ -1,26 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../lib/supabase.js';
 import { requireEmail, requireText, MAX_LENGTHS, InputError } from '../lib/validation.js';
-import { deriveRole } from '../lib/utils.js';
+import { getRequesterProfile } from '../lib/utils.js';
 
 const router = Router();
-
-async function getRequesterProfile(req: Request): Promise<any> {
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.slice(7);
-    if (token) {
-      const { supabase } = await import('../lib/supabase.js');
-      const { data: { user: authUser }, error } = await supabase.auth.getUser(token);
-      if (error || !authUser) return null;
-      const email = authUser.email?.toLowerCase().trim();
-      if (!email) return null;
-      const role = deriveRole(email, authUser.user_metadata?.role);
-      return { id: authUser.id, email, full_name: authUser.user_metadata?.full_name || email.split('@')[0], role, created_at: authUser.created_at };
-    }
-  }
-  return null;
-}
 
 // GET contact messages (admin only)
 router.get('/', async (req: Request, res: Response) => {
@@ -29,10 +12,18 @@ router.get('/', async (req: Request, res: Response) => {
     if (!requester || requester.role !== 'admin')
       return res.status(403).json({ error: 'Unauthorized. Admin credentials required.' });
 
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
+    const offset = (page - 1) * limit;
+
+    const { count } = await db
+      .from('contact_messages').select('*', { count: 'exact', head: true });
+
     const { data, error } = await db
-      .from('contact_messages').select('*').order('created_at', { ascending: false });
+      .from('contact_messages').select('*').order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
     if (error) return res.status(500).json({ error: 'Failed to fetch contact messages' });
-    res.json(data || []);
+    res.json({ data: data || [], total: count || 0, page, limit });
   } catch (err) {
     res.status(500).json({ error: 'Internal server error while fetching contact messages' });
   }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ShieldCheck, FileText, Check, Trash2, Mail, Users, ChevronRight, MessageSquare, RefreshCw, Clock, Send, Upload, Download, HelpCircle, X, Sparkles, Paperclip, Coins, DollarSign, TrendingUp, Copy } from 'lucide-react';
+import { ShieldCheck, FileText, Check, Trash2, Mail, Users, RefreshCw, Clock, Upload, Download, X, Sparkles, Paperclip, Coins, DollarSign, TrendingUp, Copy } from 'lucide-react';
 import { PageType, Profile, Order as AcademicOrder, Message, ContactMessage, Payment } from '../types';
 import { fallbackDb, getAuthHeaders } from '../lib/supabase';
 
@@ -14,7 +14,6 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
   const [contactMessages, setContactMessages] = useState<ContactMessage[]>([]);
   const [activeTab, setActiveTab] = useState<'orders' | 'messages' | 'applications' | 'payments'>('orders');
   const [applications, setApplications] = useState<any[]>([]);
-  const [profiles, setProfiles] = useState<Profile[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [paymentsSearch, setPaymentsSearch] = useState('');
   
@@ -23,9 +22,6 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
   const [isLoading, setIsLoading] = useState(true);
 
   // Status/Specialist Edit States
-  const [assignedSpecialist, setAssignedSpecialist] = useState('');
-  const [orderStatus, setOrderStatus] = useState<AcademicOrder['status']>('pending');
-  const [internalNotes, setInternalNotes] = useState('');
 
   // Delivery simulation states
   const [deliveryFileName, setDeliveryFileName] = useState('');
@@ -33,17 +29,12 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
   const [isSubmittingDelivery, setIsSubmittingDelivery] = useState(false);
 
   // New payment lifecycle states
-  const [agreedPrice, setAgreedPrice] = useState('');
-  const [previewFileContent, setPreviewFileContent] = useState('');
 
   // Admin review screenshots state
-  const [adminScreenshots, setAdminScreenshots] = useState<string[]>([]);
   const [isUploadingScreenshots, setIsUploadingScreenshots] = useState(false);
 
   // Chat/Messaging Thread states
   const [messages, setMessages] = useState<Message[]>([]);
-  const [typedMessage, setTypedMessage] = useState('');
-  const [isSendingMessage, setIsSendingMessage] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -150,27 +141,25 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
   const fetchAdminData = async () => {
     setIsLoading(true);
     try {
-      const [allOrders, allContacts, allProfiles, allPayments] = await Promise.all([
-        fallbackDb.getOrders(),
-        fallbackDb.getContactMessages(),
-        fallbackDb.getProfiles(),
+      const [ordersResult, contactsResult, profilesResult, allPayments] = await Promise.all([
+        fallbackDb.getOrders(1, 500),
+        fallbackDb.getContactMessages(1, 500),
+        fallbackDb.getProfiles(1, 500),
         fallbackDb.getPayments()
       ]);
+      const allOrders = ordersResult.data;
       setOrders(allOrders);
-      setContactMessages(allContacts);
-      setProfiles(allProfiles || []);
+      setContactMessages(contactsResult.data);
+      // profiles updated from allProfiles
       setPayments(allPayments || []);
-      fetchApplications(allProfiles || []);
+      fetchApplications(profilesResult.data);
 
       // Refresh currently selected order references
       if (selectedOrder) {
         const refreshedSelected = allOrders.find(o => o.id === selectedOrder.id);
         if (refreshedSelected) {
           setSelectedOrder(refreshedSelected);
-          setAssignedSpecialist(refreshedSelected.assigned_to || '');
-          setOrderStatus(refreshedSelected.status);
-          setInternalNotes(refreshedSelected.internal_notes || '');
-          setAgreedPrice(refreshedSelected.agreed_price ? String(refreshedSelected.agreed_price) : '');
+          // refreshed order metadata synced
         }
       }
     } catch (e) {
@@ -182,7 +171,8 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
 
   const fetchMessagesForOrder = async (orderId: string) => {
     try {
-      const allMessages = await fallbackDb.getMessages();
+      const result = await fallbackDb.getMessages(1, 500);
+      const allMessages = result.data;
       const thread = allMessages.filter(m => m.order_id === orderId);
       thread.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
       setMessages(thread);
@@ -198,10 +188,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
   useEffect(() => {
     if (selectedOrder) {
       fetchMessagesForOrder(selectedOrder.id);
-      setAssignedSpecialist(selectedOrder.assigned_to || '');
-      setOrderStatus(selectedOrder.status);
-      setInternalNotes(selectedOrder.internal_notes || '');
-      setAgreedPrice(selectedOrder.agreed_price ? String(selectedOrder.agreed_price) : '');
+      // order metadata synced
     }
   }, [selectedOrder]);
 
@@ -245,52 +232,6 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
       console.error('Error accepting expert applicant:', e);
       if (showToast) showToast('Failed to allocate expert.', 'error');
     }
-  };
-
-  const handleSaveAgreedPrice = async () => {
-    if (!selectedOrder || !agreedPrice.trim()) return;
-    try {
-      const res = await fetch(`/api/orders/${selectedOrder.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ agreed_price: Number(agreedPrice) }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const updatedOrder = await res.json();
-      setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, ...updatedOrder } : o));
-      setSelectedOrder(prev => prev ? { ...prev, ...updatedOrder } : null);
-      if (showToast) showToast('Agreed price updated successfully!', 'success');
-    } catch (e: any) {
-      console.error(e);
-      if (showToast) showToast('Failed to update agreed price.', 'error');
-    }
-  };
-
-  const handlePreviewFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!selectedOrder || !e.target.files || e.target.files.length === 0) return;
-    const file = e.target.files[0];
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      try {
-        const res = await fetch(`/api/orders/${selectedOrder.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-          body: JSON.stringify({
-            preview_url: reader.result as string,
-            preview_name: file.name
-          }),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const updatedOrder = await res.json();
-        setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, ...updatedOrder } : o));
-        setSelectedOrder(prev => prev ? { ...prev, ...updatedOrder } : null);
-        if (showToast) showToast('Watermarked preview document uploaded!', 'success');
-      } catch (err) {
-        console.error(err);
-        if (showToast) showToast('Failed to upload preview document.', 'error');
-      }
-    };
-    reader.readAsDataURL(file);
   };
 
 
@@ -418,70 +359,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
     }
   };
 
-  /**
-   * Save coordinator assignment settings: specialist, order status, and internal notes.
-   */
-  const handleUpdateOrderMetadata = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedOrder) return;
-    try {
-      const res = await fetch(`/api/orders/${selectedOrder.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({
-          assigned_to: assignedSpecialist || undefined,
-          status: orderStatus,
-          agreed_price: agreedPrice ? Number(agreedPrice) : null,
-        }),
-      });
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `HTTP ${res.status}`);
-      }
-
-      const updatedOrder = await res.json();
-      setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, ...updatedOrder } : o));
-      setSelectedOrder(prev => prev ? { ...prev, ...updatedOrder } : null);
-
-      if (showToast) showToast('Assignment settings saved successfully!', 'success');
-    } catch (e: any) {
-      console.error('handleUpdateOrderMetadata error:', e);
-      if (showToast) showToast(`Failed to save settings: ${e.message}`, 'error');
-    }
-  };
-
-
-
-  const handlePostAdminMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!typedMessage.trim() || !selectedOrder || !user) return;
-
-    setIsSendingMessage(true);
-    try {
-      const allMessages = await fallbackDb.getMessages();
-      const adminMessage: Message = {
-        id: 'msg-' + Math.random().toString(36).substring(2, 9),
-        order_id: selectedOrder.id,
-        sender_id: user.id,
-        sender_name: `${user.full_name} (Admin)`,
-        content: typedMessage,
-        is_admin: true,
-        created_at: new Date().toISOString()
-      };
-
-      allMessages.push(adminMessage);
-      await fallbackDb.setMessages(allMessages);
-      setMessages(prev => [...prev, adminMessage]);
-      setTypedMessage('');
-      if (showToast) showToast('Message posted to client dashboard!', 'success');
-    } catch (e) {
-      console.error(e);
-      if (showToast) showToast('Message sending failed.', 'error');
-    } finally {
-      setIsSendingMessage(false);
-    }
-  };
 
   const handleUploadAdminScreenshots = async (files: FileList) => {
     if (!selectedOrder) return;

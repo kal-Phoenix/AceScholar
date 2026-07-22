@@ -1,5 +1,5 @@
 -- =====================================================================
---                   ACE ACADEMIC DATABASE SCHEMA
+--                   ACE SCHOLAR DATABASE SCHEMA
 --        Complete setup — paste this into Supabase SQL Editor and run.
 --        Uses IF NOT EXISTS / OR REPLACE so it is safe to re-run.
 -- =====================================================================

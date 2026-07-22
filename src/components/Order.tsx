@@ -1,44 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import {
-  FileText, ClipboardList, Clock, DollarSign, Upload, Sparkles,
-  ChevronLeft, ShieldCheck, HelpCircle, CreditCard, Lock, UserCheck,
-  MapPin, Globe, Check, ChevronRight, BookOpen, Layers, Code, Pencil,
-  BarChart2, Calculator, Presentation, X, AlertCircle
+  Clock, Upload,
+  ChevronLeft, ShieldCheck, Lock,
+  MapPin, Globe, Check, ChevronRight, AlertCircle
 } from 'lucide-react';
 import { PageType, Profile, Order as AcademicOrder } from '../types';
-import { fallbackDb, supabase } from '../lib/supabase';
+import { fallbackDb } from '../lib/supabase';
 import IosDateTimePicker from './IosDateTimePicker';
-
-const EXPERTS = [
-  {
-    id: 'exp-biruk', name: 'Eng. Biruk T.', degree: 'MSc in Mechanical Engineering', rating: 4.9,
-    completedJobs: 184,
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=120',
-    specialty: '2D Drafting & SolidWorks CAD', location: 'Addis Ababa, Ethiopia', timezone: 'UTC+3',
-    bonusInfo: 'Top CAD & Drawing Specialist'
-  },
-  {
-    id: 'exp-sarah', name: 'Dr. Sarah Jenkins', degree: 'PhD in Literature & Academic Methods', rating: 4.8,
-    completedJobs: 312,
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=120',
-    specialty: 'Academic Writing & Essay Design', location: 'London, United Kingdom', timezone: 'UTC+1',
-    bonusInfo: 'Top Essay Specialist'
-  },
-  {
-    id: 'exp-michael', name: 'Eng. Michael S.', degree: 'PhD in Applied Physics & Mathematics', rating: 4.9,
-    completedJobs: 245,
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=120',
-    specialty: 'STEM Problems & Numerical Analysis', location: 'California, United States', timezone: 'UTC-7',
-    bonusInfo: 'Calculus & Physics Specialist'
-  },
-  {
-    id: 'exp-almaz', name: 'Almaz D.', degree: 'BSc in Software Engineering', rating: 5.0,
-    completedJobs: 92,
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=120',
-    specialty: 'Coding (Python, MATLAB, Web Dev)', location: 'Bahir Dar, Ethiopia', timezone: 'UTC+3',
-    bonusInfo: 'Fastest 12h express coder'
-  }
-];
 
 export function getBasePrice(category: string, countryName: string) {
   if (category === 'Simple Assignment') return 5;
@@ -91,17 +59,15 @@ const SERVICE_OPTIONS = [
   { value: 'Presentations', label: 'Presentations', desc: 'Slide Decks, Posters', icon: '🎯' },
 ];
 
-const STEPS = ['Project Details', 'Requirements', 'Budget & Expert', 'Review', 'Payment'];
+const STEPS = ['Service', 'Details', 'Budget', 'Review', 'Payment'];
 
 export default function Order({ user, selectedServiceType, setSelectedServiceType, setCurrentPage, showToast, detectedLocation, setRedirectPage }: OrderProps) {
   const [step, setStep] = useState(1);
 
-  // Step 1 fields
   const [serviceType, setServiceType] = useState(selectedServiceType || 'Academic Writing');
   const [subject, setSubject] = useState('');
   const [academicLevel, setAcademicLevel] = useState('Undergraduate');
 
-  // Step 2 fields
   const [description, setDescription] = useState('');
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [fileName, setFileName] = useState<string | null>(null);
@@ -113,29 +79,30 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
     return `${yr}-${mo}-${dy}T12:00`;
   });
 
-  // Step 3 fields
   const [country, setCountry] = useState(() => detectedLocation?.country || user?.country || 'Ethiopia');
   const [budget, setBudget] = useState('');
   const [expertPreference, setExpertPreference] = useState('auto');
-  const [selectedExpertId, setSelectedExpertId] = useState<string>('auto');
   const [previousExpertName, setPreviousExpertName] = useState('');
   const [liveRates, setLiveRates] = useState<Record<string, number>>({ ETB: 120, GBP: 0.79, CAD: 1.36, EUR: 0.92, SAR: 3.75 });
 
-  // Step 5 payment
   const [paymentChoice, setPaymentChoice] = useState<'now' | 'delivery' | null>(null);
-  const [ethiopiaMethod, setEthiopiaMethod] = useState<'cbe' | 'telebirr' | 'boa'>('cbe');
+  const [ethiopiaMethod, setEthiopiaMethod] = useState<'cbe' | 'telebirr' | 'boa' | 'crypto' | 'card'>('cbe');
+  const [internationalMethod, setInternationalMethod] = useState<'crypto' | 'card'>('crypto');
   const [ethiopiaTxRef, setEthiopiaTxRef] = useState('');
   const [paymentScreenshot, setPaymentScreenshot] = useState<string>('');
   const [paymentScreenshotName, setPaymentScreenshotName] = useState<string>('');
-  const [paddleCardName, setPaddleCardName] = useState('');
-  const [paddleCardNumber, setPaddleCardNumber] = useState('');
-  const [paddleCardExpiry, setPaddleCardExpiry] = useState('');
-  const [paddleCardCvv, setPaddleCardCvv] = useState('');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successOrder, setSuccessOrder] = useState<AcademicOrder | null>(null);
+  const [paymentConfig, setPaymentConfig] = useState<any>(null);
 
-  // Live exchange rates
+  useEffect(() => {
+    fetch('/api/payments/config')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => { if (data) setPaymentConfig(data); })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     let isMounted = true;
     (async () => {
@@ -192,22 +159,17 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
   }, [serviceType, country, detectedLocation, liveRates]);
 
   const uploadFileToStorage = async (file: File, orderId: string): Promise<string | null> => {
-    if (!supabase) return null;
-    const ext = file.name.split('.').pop();
-    const path = `orders/${orderId}/${Date.now()}.${ext}`;
-    const { error } = await supabase.storage.from('order-files').upload(path, file, { contentType: file.type, upsert: true });
-    if (error) return null;
-    const { data: urlData } = supabase.storage.from('order-files').getPublicUrl(path);
-    return urlData?.publicUrl || null;
+    try {
+      const compressed = await compressImage(file);
+      return await fallbackDb.uploadFile(compressed, file.name || `order-${orderId}.png`);
+    } catch {
+      return null;
+    }
   };
 
   const getMatchedExpert = () => {
     if (expertPreference === 'previous') return `Previous Expert: ${previousExpertName || 'Not specified'}`;
     if (expertPreference === 'near') return 'Expert Specialist Near Me (Timezone Match)';
-    if (expertPreference === 'choose' && selectedExpertId !== 'auto') {
-      const exp = EXPERTS.find(e => e.id === selectedExpertId);
-      if (exp) return `Selected Expert: ${exp.name} (${exp.specialty})`;
-    }
     return 'Automated Best Match';
   };
 
@@ -237,62 +199,53 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
     setIsSubmitting(true);
     try {
       const orderId = 'ord-' + Math.random().toString(36).substring(2, 7);
-
-      // Upload assignment attachment file if one was selected
       let filePublicUrl: string | undefined;
       if (selectedFile) {
         if (showToast) showToast('Uploading assignment file...', 'success');
         const url = await uploadFileToStorage(selectedFile, orderId);
         filePublicUrl = url || undefined;
       }
-
       const base = buildOrderBase(orderId, filePublicUrl);
       const totalUSD = Math.max(1, Math.round(budgetInUSD));
       const isEthiopia = country.toLowerCase() === 'ethiopia';
-
       let newOrder: AcademicOrder;
 
       if (paymentChoice === 'delivery') {
-        // Pay Upon Delivery — no payment yet, don't set payment_status or screenshot
         newOrder = {
           ...base,
           total_amount: totalUSD,
           currency: 'USD',
           special_instructions: ['Pay Upon Delivery', base.special_instructions].filter(Boolean).join(' | '),
-          // payment_status intentionally omitted — admin activates invoice when work is done
         };
         if (showToast) showToast('Submitting order...', 'success');
       } else {
-        // Pay Now — validate screenshot
         if (!paymentScreenshot) {
           if (showToast) showToast('Please upload your payment receipt screenshot.', 'error');
           setIsSubmitting(false);
           return;
         }
-
         const refText = ethiopiaTxRef.trim();
+        const activeMethod = isEthiopia ? ethiopiaMethod : internationalMethod;
         const methodLabel = isEthiopia
           ? `Ethiopia ${ethiopiaMethod.toUpperCase()}${refText ? ` Ref: ${refText}` : ' (Screenshot Attached)'}`
-          : `Crypto Payment${refText ? ` Ref: ${refText}` : ' (Screenshot Attached)'}`;
-
+          : `${internationalMethod === 'crypto' ? 'Crypto' : 'Card'} Payment${refText ? ` Ref: ${refText}` : ' (Screenshot Attached)'}`;
+        const paymentMethodType = activeMethod === 'crypto' ? 'crypto' : activeMethod === 'card' ? 'card' : 'bank_transfer';
         newOrder = {
           ...base,
           total_amount: totalUSD,
           currency: 'USD',
           special_instructions: [methodLabel, base.special_instructions].filter(Boolean).join(' | '),
-          payment_method: isEthiopia ? `ethiopia_${ethiopiaMethod}` : 'crypto',
-          payment_method_type: isEthiopia ? 'bank_transfer' : 'crypto',
+          payment_method: isEthiopia ? `ethiopia_${ethiopiaMethod}` : internationalMethod,
+          payment_method_type: paymentMethodType,
           payment_ref_number: refText || 'Screenshot Attached',
           payment_screenshot: paymentScreenshot,
-          payment_status: 'pending',   // signals admin to verify
+          payment_status: 'pending',
         };
         if (showToast) showToast('Submitting order with payment proof...', 'success');
       }
 
-      // Use the proper POST /api/orders endpoint (not bulk sync)
       const created = await fallbackDb.createOrder(newOrder);
       if (!created) throw new Error('Server rejected the order. Please try again.');
-
       setSuccessOrder(created);
       setSelectedServiceType(null);
       if (showToast) showToast(
@@ -313,16 +266,12 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
 
   const handleGoBack = () => { setSelectedServiceType(null); setCurrentPage(user ? 'dashboard' : 'home'); };
 
-  // Validation per step
   const canProceed = () => {
     if (step === 1) return serviceType.trim() !== '';
     if (step === 2) {
       if (!deadline || deadline.trim() === '') return false;
-      // Validate that deadline is in the future (at least 1 hour from now)
       const deadlineMs = new Date(deadline).getTime();
-      if (isNaN(deadlineMs) || deadlineMs <= Date.now() + 3600000) {
-        return false;
-      }
+      if (isNaN(deadlineMs) || deadlineMs <= Date.now() + 3600000) return false;
       return true;
     }
     if (step === 3) {
@@ -335,9 +284,7 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
     if (step === 4) return true;
     if (step === 5) {
       if (paymentChoice === null) return false;
-      if (paymentChoice === 'now') {
-        return ethiopiaTxRef.trim() !== '' && paymentScreenshot !== '';
-      }
+      if (paymentChoice === 'now') return ethiopiaTxRef.trim() !== '' && paymentScreenshot !== '';
       return true;
     }
     return true;
@@ -346,7 +293,6 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
   const handleNext = () => { if (canProceed() && step < 5) setStep(s => s + 1); };
   const handleBack = () => { if (step > 1) setStep(s => s - 1); };
 
-  // File handlers
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
   const handleDragLeave = () => setIsDragging(false);
   const handleDrop = (e: React.DragEvent) => {
@@ -365,25 +311,24 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
     }
   };
 
+  // ─── Auth Gate ───
   if (!user) {
     return (
-      <div className="bg-[#0F172A] text-slate-100 min-h-[85vh] py-12 px-4 sm:px-6 flex items-center justify-center font-sans" id="order-signin-required-container">
-        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 sm:p-8 text-center space-y-6">
-          <div className="bg-amber-500/10 text-amber-500 p-4 rounded-full border border-amber-500/20 w-fit mx-auto">
-            <Lock className="h-10 w-10 animate-pulse" />
+      <div className="bg-[#0F172A] text-slate-100 min-h-[85vh] flex items-center justify-center font-sans px-4">
+        <div className="max-w-sm w-full bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center space-y-5">
+          <div className="bg-amber-500/10 text-amber-500 p-3 rounded-full border border-amber-500/20 w-fit mx-auto">
+            <Lock className="h-8 w-8" />
           </div>
+          <h2 className="text-xl font-bold text-white">Sign in required</h2>
+          <p className="text-sm text-slate-400">You need an account to place an order.</p>
           <div className="space-y-2">
-            <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">Authentication Required</h2>
-            <p className="text-xs sm:text-sm text-slate-400">You must be logged in to place academic orders.</p>
-          </div>
-          <div className="grid grid-cols-1 gap-3">
             <button onClick={() => { if (setRedirectPage) setRedirectPage('order'); setCurrentPage('login'); }}
-              className="w-full bg-amber-500 hover:bg-amber-400 text-[#0F172A] font-bold py-3 rounded-xl text-sm shadow-lg cursor-pointer flex items-center justify-center space-x-2">
-              <UserCheck className="h-4 w-4" /><span>Sign In to Continue</span>
+              className="w-full bg-amber-500 hover:bg-amber-400 text-[#0F172A] font-bold py-2.5 rounded-xl text-sm transition-colors cursor-pointer">
+              Sign In
             </button>
             <button onClick={() => { if (setRedirectPage) setRedirectPage('order'); setCurrentPage('signup'); }}
-              className="w-full bg-slate-800 hover:bg-slate-750 text-slate-200 font-semibold py-3 rounded-xl text-sm border border-slate-700 cursor-pointer">
-              Create Free Account
+              className="w-full bg-slate-800 hover:bg-slate-750 text-slate-300 font-semibold py-2.5 rounded-xl text-sm border border-slate-700 transition-colors cursor-pointer">
+              Create Account
             </button>
           </div>
         </div>
@@ -391,109 +336,124 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
     );
   }
 
+  // ─── Success Screen ───
   if (successOrder) {
     return (
-      <div className="bg-[#0F172A] text-slate-100 min-h-[85vh] py-12 px-4 sm:px-6 flex items-center justify-center font-sans" id="order-success-container">
-        <div className="max-w-xl w-full bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 sm:p-10 text-center space-y-6">
-          <div className="bg-emerald-500/15 text-emerald-400 p-4 rounded-full border border-emerald-500/30 w-fit mx-auto animate-bounce">
-            <ShieldCheck className="h-12 w-12" />
+      <div className="bg-[#0F172A] text-slate-100 min-h-[85vh] flex items-center justify-center font-sans px-4">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center space-y-5">
+          <div className="bg-emerald-500/15 text-emerald-400 p-3 rounded-full border border-emerald-500/30 w-fit mx-auto">
+            <ShieldCheck className="h-10 w-10" />
           </div>
-          <div className="space-y-2">
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">Order Submitted!</h2>
-            <p className="text-xs sm:text-sm text-slate-300">Your assignment specifications are registered securely.</p>
-          </div>
-          <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-4 sm:p-6 text-left font-mono text-xs sm:text-sm space-y-3">
-            <div className="flex justify-between border-b border-slate-800 pb-2">
-              <span className="text-slate-400">ORDER REF:</span>
-              <span className="text-amber-500 font-bold">{successOrder.id}</span>
-            </div>
-            <div className="flex justify-between"><span className="text-slate-400">SERVICE:</span><span className="text-slate-200">{successOrder.service_type}</span></div>
-            <div className="flex justify-between"><span className="text-slate-400">SUBJECT:</span><span className="text-slate-200">{successOrder.subject}</span></div>
-            <div className="flex justify-between"><span className="text-slate-400">LEVEL:</span><span className="text-slate-200">{successOrder.academic_level}</span></div>
-            <div className="flex justify-between"><span className="text-slate-400">DEADLINE:</span>
-              <span className="text-slate-200">{new Date(successOrder.deadline).toLocaleDateString([], { year: 'numeric', month: 'long', day: 'numeric' })}</span>
-            </div>
-            <div className="flex justify-between"><span className="text-slate-400">BUDGET:</span><span className="text-amber-400 font-bold">{successOrder.budget_range}</span></div>
+          <h2 className="text-2xl font-bold text-white">Order Submitted</h2>
+          <p className="text-sm text-slate-400">Your assignment is registered. We'll be in touch shortly.</p>
+          <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 text-left space-y-2 text-sm">
+            <div className="flex justify-between"><span className="text-slate-500">Ref</span><span className="text-amber-400 font-mono font-bold">{successOrder.id}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Service</span><span className="text-white">{successOrder.service_type}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Budget</span><span className="text-amber-400 font-bold">{successOrder.budget_range}</span></div>
           </div>
           <button onClick={() => setCurrentPage('dashboard')}
-            className="w-full bg-amber-500 hover:bg-amber-400 text-[#0F172A] font-bold py-3 rounded-lg text-sm shadow-lg cursor-pointer">
-            Go to My Dashboard
+            className="w-full bg-amber-500 hover:bg-amber-400 text-[#0F172A] font-bold py-2.5 rounded-xl text-sm transition-colors cursor-pointer">
+            Go to Dashboard
           </button>
         </div>
       </div>
     );
   }
 
+  // ─── Main Order Form ───
   return (
-    <div className="bg-[#0F172A] text-slate-100 min-h-screen font-sans py-8 px-4 sm:px-6 lg:px-8" id="order-form-container">
-      <div className="max-w-3xl mx-auto space-y-6">
+    <div className="bg-[#0F172A] text-slate-100 h-screen font-sans flex flex-col overflow-hidden">
 
-        {/* Back Button */}
-        <button onClick={handleGoBack} className="inline-flex items-center space-x-1 text-slate-400 hover:text-white transition-colors text-sm cursor-pointer">
-          <ChevronLeft className="h-4 w-4" /><span>Back</span>
-        </button>
-
-        {/* Header */}
-        <header className="space-y-1">
-          <span className="text-amber-500 text-xs font-bold tracking-widest uppercase">Secure Order Form</span>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">Place Your Academic Order</h1>
-          <p className="text-xs sm:text-sm text-slate-400 font-light">Complete the steps below to connect with a specialist. Revisions are always free.</p>
-        </header>
-
-        {/* Step Progress Bar */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Step {step} of {STEPS.length}</span>
-            <span className="text-xs font-bold text-amber-400">{STEPS[step - 1]}</span>
+      {/* ── Top Bar ── */}
+      <div className="shrink-0 border-b border-slate-800/80 bg-[#0F172A]">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6">
+          {/* Row 1: Back + Title */}
+          <div className="flex items-center gap-3 py-3">
+            <button onClick={handleGoBack} className="shrink-0 p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer">
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-bold text-white truncate">Place Your Order</h1>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            {STEPS.map((s, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                <div className={`h-1.5 w-full rounded-full transition-all duration-500 ${i < step ? 'bg-amber-500' : i === step - 1 ? 'bg-amber-500/50' : 'bg-slate-800'}`} />
-                <span className={`hidden sm:block text-[9px] font-bold uppercase tracking-wider ${i < step ? 'text-amber-400' : i === step - 1 ? 'text-slate-300' : 'text-slate-600'}`}>{s}</span>
-              </div>
-            ))}
+          {/* Row 2: Step indicator */}
+          <div className="flex items-center gap-0 pb-3 overflow-x-auto">
+            {STEPS.map((label, i) => {
+              const isActive = i + 1 === step;
+              const isDone = i + 1 < step;
+              return (
+                <React.Fragment key={i}>
+                  <button
+                    onClick={() => { if (i + 1 < step) setStep(i + 1); }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                      isActive
+                        ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                        : isDone
+                          ? 'text-emerald-400 hover:bg-slate-800 cursor-pointer'
+                          : 'text-slate-600'
+                    }`}
+                  >
+                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                      isActive
+                        ? 'bg-amber-500 text-[#0F172A]'
+                        : isDone
+                          ? 'bg-emerald-500/20 text-emerald-400'
+                          : 'bg-slate-800 text-slate-500'
+                    }`}>
+                      {isDone ? <Check className="h-3 w-3" /> : i + 1}
+                    </span>
+                    <span className="hidden sm:inline">{label}</span>
+                  </button>
+                  {i < STEPS.length - 1 && (
+                    <div className={`w-4 sm:w-8 h-px mx-0.5 shrink-0 ${isDone ? 'bg-emerald-500/40' : 'bg-slate-800'}`} />
+                  )}
+                </React.Fragment>
+              );
+            })}
           </div>
         </div>
+      </div>
 
-        {/* Step Content Card */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-5 sm:p-8 space-y-6" id="order-step-card">
+      {/* ── Content ── */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
 
-          {/* ─── STEP 1: Project Details ─── */}
+          {/* ═══ STEP 1: Service ═══ */}
           {step === 1 && (
-            <div className="space-y-5">
-              <div className="flex items-center space-x-2 border-b border-slate-800 pb-3">
-                <Sparkles className="h-5 w-5 text-amber-500" />
-                <h3 className="text-sm sm:text-base font-bold text-white uppercase tracking-wider">Select Your Service</h3>
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-lg font-bold text-white mb-1">What do you need help with?</h2>
+                <p className="text-sm text-slate-400">Choose the type of project and tell us the subject.</p>
               </div>
 
-              {/* Service Type Cards */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {SERVICE_OPTIONS.map(opt => (
                   <button key={opt.value} type="button" onClick={() => setServiceType(opt.value)}
-                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${serviceType === opt.value ? 'border-amber-500 bg-amber-500/10' : 'border-slate-800 bg-slate-950/40 hover:border-slate-700'}`}>
-                    <span className="text-xl block mb-1">{opt.icon}</span>
-                    <h4 className={`text-xs font-bold leading-tight ${serviceType === opt.value ? 'text-amber-400' : 'text-white'}`}>{opt.label}</h4>
-                    <p className="text-[9px] text-slate-500 mt-0.5 font-light leading-tight">{opt.desc}</p>
-                    {serviceType === opt.value && <Check className="h-3 w-3 text-amber-500 mt-1" />}
+                    className={`group p-4 rounded-xl border text-left transition-all cursor-pointer ${
+                      serviceType === opt.value
+                        ? 'border-amber-500 bg-amber-500/10 ring-1 ring-amber-500/20'
+                        : 'border-slate-800 bg-slate-900/50 hover:border-slate-700 hover:bg-slate-900'
+                    }`}>
+                    <span className="text-xl block mb-2">{opt.icon}</span>
+                    <h4 className={`text-sm font-bold ${serviceType === opt.value ? 'text-amber-400' : 'text-white group-hover:text-amber-400 transition-colors'}`}>{opt.label}</h4>
+                    <p className="text-[11px] text-slate-500 mt-1 leading-snug">{opt.desc}</p>
                   </button>
                 ))}
               </div>
 
-              {/* Subject & Level */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-slate-300">Specific Subject / Field</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">Subject / Field</label>
                   <input type="text" value={subject} onChange={e => setSubject(e.target.value)}
-                    placeholder="e.g. Mechanical Engineering, Calculus, Literature"
-                    className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg py-2 px-3 text-slate-100 text-sm outline-none transition-colors" />
+                    placeholder="e.g. Mechanical Engineering, Calculus"
+                    className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 rounded-xl py-2.5 px-4 text-sm text-slate-100 outline-none transition-all placeholder:text-slate-600" />
                 </div>
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-slate-300">Academic Level *</label>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">Academic Level</label>
                   <select value={academicLevel} onChange={e => setAcademicLevel(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg py-2 px-3 text-slate-100 text-sm outline-none transition-colors">
+                    className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 rounded-xl py-2.5 px-4 text-sm text-slate-100 outline-none transition-all appearance-none cursor-pointer">
                     <option value="High School">High School</option>
-                    <option value="Undergraduate">Undergraduate (BSc/BA)</option>
+                    <option value="Undergraduate">Undergraduate (BSc / BA)</option>
                     <option value="Masters">MSc / Postgraduate</option>
                     <option value="PhD">PhD / Doctorate</option>
                   </select>
@@ -502,257 +462,291 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
             </div>
           )}
 
-          {/* ─── STEP 2: Requirements ─── */}
+          {/* ═══ STEP 2: Details ═══ */}
           {step === 2 && (
-            <div className="space-y-5">
-              <div className="flex items-center space-x-2 border-b border-slate-800 pb-3">
-                <ClipboardList className="h-5 w-5 text-amber-500" />
-                <h3 className="text-sm sm:text-base font-bold text-white uppercase tracking-wider">Describe Your Requirements</h3>
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-lg font-bold text-white mb-1">Describe your project</h2>
+                <p className="text-sm text-slate-400">The more detail you give, the better your result.</p>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-slate-300">Assignment Description / Prompt</label>
-                <textarea rows={5} value={description} onChange={e => setDescription(e.target.value)}
-                  placeholder="Copy and paste your complete question prompts, instructions, data parameters, required page counts, system definitions..."
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg py-2 px-3 text-slate-100 text-sm outline-none transition-colors resize-none font-light" />
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Assignment Description</label>
+                <textarea rows={4} value={description} onChange={e => setDescription(e.target.value)}
+                  placeholder="Paste your full question, instructions, data parameters, page requirements..."
+                  className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 rounded-xl py-3 px-4 text-sm text-slate-100 outline-none transition-all resize-none placeholder:text-slate-600" />
               </div>
 
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-slate-300">Special Instructions (Optional)</label>
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Special Instructions <span className="text-slate-600 font-normal">(optional)</span></label>
                 <input type="text" value={specialInstructions} onChange={e => setSpecialInstructions(e.target.value)}
-                  placeholder="e.g. APA 7th style, SolidWorks 2021, MATLAB R2022b, 12 peer-reviewed journals"
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg py-2 px-3 text-slate-100 text-sm outline-none transition-colors" />
+                  placeholder="APA 7th, SolidWorks 2021, MATLAB R2022b..."
+                  className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 rounded-xl py-2.5 px-4 text-sm text-slate-100 outline-none transition-all placeholder:text-slate-600" />
               </div>
 
-              <div className="space-y-2">
-                <label className="block text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                  <Clock className="h-4 w-4 text-amber-500" /><span>Exact Project Deadline *</span>
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5 text-amber-500" /> Deadline</span>
                 </label>
                 <IosDateTimePicker value={deadline} onChange={setDeadline} />
               </div>
 
-              {/* File Upload */}
-              <div className="space-y-2">
-                <label className="block text-xs font-semibold text-slate-300">Attach Guidelines / Prompt Files (Optional)</label>
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Attachments <span className="text-slate-600 font-normal">(optional)</span></label>
                 <div onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
-                  className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors cursor-pointer ${isDragging ? 'border-amber-500 bg-amber-500/5' : 'border-slate-800 hover:border-amber-500/50 bg-slate-950/40'}`}
+                  className={`border-2 border-dashed rounded-xl py-5 px-4 text-center transition-all cursor-pointer ${
+                    isDragging ? 'border-amber-500 bg-amber-500/5' : 'border-slate-800 hover:border-slate-700 bg-slate-900/50'
+                  }`}
                   onClick={() => document.getElementById('order-file-picker')?.click()}>
-                  <Upload className="h-8 w-8 text-slate-500 mx-auto mb-2" />
-                  <p className="text-xs text-slate-400">{fileName ? <span className="text-amber-400 font-semibold">📎 {fileName}</span> : 'Drag & drop or click to attach (PDF, DOCX, ZIP, etc.)'}</p>
+                  {fileName ? (
+                    <p className="text-sm text-amber-400 font-semibold">{fileName}</p>
+                  ) : (
+                    <>
+                      <Upload className="h-6 w-6 text-slate-600 mx-auto mb-1.5" />
+                      <p className="text-xs text-slate-500">Drop a file here or <span className="text-amber-400">browse</span></p>
+                      <p className="text-[10px] text-slate-600 mt-1">PDF, DOCX, ZIP — up to 40 MB</p>
+                    </>
+                  )}
                   <input type="file" id="order-file-picker" onChange={handleFileChange} className="hidden" />
                 </div>
               </div>
             </div>
           )}
 
-          {/* ─── STEP 3: Budget & Expert ─── */}
+          {/* ═══ STEP 3: Budget ═══ */}
           {step === 3 && (
-            <div className="space-y-5">
-              <div className="flex items-center space-x-2 border-b border-slate-800 pb-3">
-                <DollarSign className="h-5 w-5 text-amber-500" />
-                <h3 className="text-sm sm:text-base font-bold text-white uppercase tracking-wider">Budget & Expert Match</h3>
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-lg font-bold text-white mb-1">Budget & expert match</h2>
+                <p className="text-sm text-slate-400">Set your budget and choose how we match you with a specialist.</p>
               </div>
 
-              {/* Country */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-slate-300">Your Country (for currency)</label>
-                <select value={country} onChange={e => setCountry(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg py-2 px-3 text-slate-100 text-sm outline-none transition-colors">
-                  {['Ethiopia', 'United States', 'United Kingdom', 'Canada', 'Germany', 'Saudi Arabia', 'Other'].map(c => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Budget */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-slate-300">Your Budget ({curr.currency}) *</label>
-                <div className="relative flex items-center">
-                  <span className="absolute left-3 text-slate-400 text-xs font-mono font-bold">{curr.symbol}</span>
-                  <input type="text" value={budget}
-                    onChange={e => setBudget(e.target.value.replace(/[^0-9]/g, '') || '')}
-                    className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg py-2 pl-8 pr-3 text-slate-100 text-sm outline-none transition-colors font-mono font-bold"
-                    placeholder={`Min ${curr.symbol}${Math.ceil(getBasePrice(serviceType, country) * curr.exchangeRate)}`} required />
-                </div>
-                <div className="flex flex-wrap gap-3 text-xs mt-1">
-                  <span className="text-slate-400">Base price: <span className="text-amber-400 font-bold">{curr.symbol}{Math.ceil(getBasePrice(serviceType, country) * curr.exchangeRate)} {curr.currency}</span></span>
-                  {Number(budget) > 0 && <span className="text-slate-400">≈ <span className="text-white font-bold">${Math.round(budgetInUSD)} USD</span></span>}
-                </div>
-                {needsDownpayment && (
-                  <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-2.5 text-xs text-amber-400 flex items-center gap-2">
-                    <AlertCircle className="h-4 w-4 shrink-0" />
-                    <span>Budget ≥ $100 USD — You will choose to <strong>Pay Now</strong> or <strong>Pay Upon Delivery</strong> in the final step.</span>
-                  </div>
-                )}
-                {!needsDownpayment && Number(budget) > 0 && (
-                  <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2.5 text-xs text-emerald-400 flex items-center gap-2">
-                    <Check className="h-4 w-4 shrink-0" />
-                    <span>Budget under $100 — <strong>No upfront payment required.</strong> Pay upon delivery.</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Expert Preference */}
-              <div className="space-y-2">
-                <label className="block text-xs font-semibold text-slate-300">Expert Preference</label>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-                  {[
-                    { val: 'auto', icon: <Globe className="h-4 w-4 text-amber-500" />, label: 'Auto-Match', desc: 'Best overall fit' },
-                    { val: 'choose', icon: <UserCheck className="h-4 w-4 text-amber-500" />, label: 'Pick Expert', desc: 'Choose specialist' },
-                    { val: 'previous', icon: <Clock className="h-4 w-4 text-amber-500" />, label: 'Previous', desc: 'Worked before' },
-                    { val: 'near', icon: <MapPin className="h-4 w-4 text-amber-500" />, label: 'Near Me', desc: 'Timezone-aligned' },
-                  ].map(opt => (
-                    <button key={opt.val} type="button" onClick={() => { setExpertPreference(opt.val); if (opt.val !== 'choose') setSelectedExpertId('auto'); }}
-                      className={`p-3 rounded-lg border text-left transition-all cursor-pointer ${expertPreference === opt.val ? 'border-amber-500 bg-amber-500/10 text-white' : 'border-slate-800 bg-slate-950/40 hover:border-slate-700 text-slate-300'}`}>
-                      <div className="flex items-center justify-between">{opt.icon}{expertPreference === opt.val && <Check className="h-3.5 w-3.5 text-amber-500" />}</div>
-                      <h4 className="text-xs font-bold mt-1.5">{opt.label}</h4>
-                      <p className="text-[9px] text-slate-400 mt-0.5 font-light">{opt.desc}</p>
-                    </button>
-                  ))}
-                </div>
-
-                {expertPreference === 'choose' && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-                    {EXPERTS.map(exp => (
-                      <div key={exp.id} onClick={() => setSelectedExpertId(exp.id)}
-                        className={`p-3 rounded-xl border cursor-pointer transition-all flex space-x-3 ${selectedExpertId === exp.id ? 'border-amber-500 bg-amber-500/5' : 'border-slate-850 bg-slate-950/60 hover:border-slate-750'}`}>
-                        <img src={exp.avatar} alt={exp.name} referrerPolicy="no-referrer" className="h-10 w-10 rounded-full object-cover border border-slate-700 shrink-0" />
-                        <div className="min-w-0">
-                          <div className="flex items-center justify-between gap-1">
-                            <h4 className="text-xs font-bold text-white truncate">{exp.name}</h4>
-                            <span className="text-[10px] text-amber-400 font-mono shrink-0">★ {exp.rating}</span>
-                          </div>
-                          <p className="text-[10px] text-slate-400 truncate">{exp.specialty}</p>
-                          <p className="text-[10px] text-slate-500">{exp.completedJobs} completed</p>
-                        </div>
-                      </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">Country</label>
+                  <select value={country} onChange={e => setCountry(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 rounded-xl py-2.5 px-4 text-sm text-slate-100 outline-none transition-all appearance-none cursor-pointer">
+                    {['Ethiopia', 'United States', 'United Kingdom', 'Canada', 'Germany', 'Saudi Arabia', 'Other'].map(c => (
+                      <option key={c} value={c}>{c}</option>
                     ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">Budget ({curr.currency})</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-bold">{curr.symbol}</span>
+                    <input type="text" value={budget}
+                      onChange={e => setBudget(e.target.value.replace(/[^0-9]/g, '') || '')}
+                      className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 rounded-xl py-2.5 pl-9 pr-4 text-sm text-slate-100 font-bold outline-none transition-all"
+                      placeholder={`Min ${curr.symbol}${Math.ceil(getBasePrice(serviceType, country) * curr.exchangeRate)}`} />
                   </div>
-                )}
+                  <div className="flex items-center gap-3 mt-1.5 text-xs">
+                    <span className="text-slate-500">Base: <span className="text-amber-400 font-bold">{curr.symbol}{Math.ceil(getBasePrice(serviceType, country) * curr.exchangeRate)}</span></span>
+                    {Number(budget) > 0 && <span className="text-slate-500">≈ <span className="text-white font-bold">${Math.round(budgetInUSD)} USD</span></span>}
+                  </div>
+                </div>
+              </div>
+
+              {needsDownpayment ? (
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-sm text-amber-400 flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  Budget ≥ $100 USD — you'll choose to pay now or upon delivery in the final step.
+                </div>
+              ) : Number(budget) > 0 ? (
+                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 text-sm text-emerald-400 flex items-center gap-2">
+                  <Check className="h-4 w-4 shrink-0" />
+                  Budget under $100 — no upfront payment required. Pay upon delivery.
+                </div>
+              ) : null}
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-2">Expert Preference</label>
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { val: 'auto', icon: Globe, label: 'Auto-Match', desc: 'Best fit for you' },
+                    { val: 'previous', icon: Clock, label: 'Previous', desc: 'Worked before' },
+                    { val: 'near', icon: MapPin, label: 'Near Me', desc: 'Same timezone' },
+                  ].map(opt => {
+                    const Icon = opt.icon;
+                    return (
+                      <button key={opt.val} type="button" onClick={() => setExpertPreference(opt.val)}
+                        className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                          expertPreference === opt.val
+                            ? 'border-amber-500 bg-amber-500/10'
+                            : 'border-slate-800 bg-slate-900/50 hover:border-slate-700'
+                        }`}>
+                        <div className="flex items-center justify-between mb-1">
+                          <Icon className={`h-4 w-4 ${expertPreference === opt.val ? 'text-amber-400' : 'text-slate-500'}`} />
+                          {expertPreference === opt.val && <Check className="h-3.5 w-3.5 text-amber-400" />}
+                        </div>
+                        <h4 className={`text-xs font-bold ${expertPreference === opt.val ? 'text-white' : 'text-slate-300'}`}>{opt.label}</h4>
+                        <p className="text-[10px] text-slate-500 mt-0.5">{opt.desc}</p>
+                      </button>
+                    );
+                  })}
+                </div>
                 {expertPreference === 'previous' && (
                   <input type="text" value={previousExpertName} onChange={e => setPreviousExpertName(e.target.value)}
-                    placeholder="e.g. Expert #401, Dr. Alex, or Eng. Biruk"
-                    className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg py-2 px-3 text-slate-100 text-xs outline-none transition-colors mt-2" />
+                    placeholder="Expert name or ID"
+                    className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 rounded-xl py-2.5 px-4 text-sm text-slate-100 outline-none transition-all mt-3 placeholder:text-slate-600" />
                 )}
               </div>
             </div>
           )}
 
-          {/* ─── STEP 4: Review ─── */}
+          {/* ═══ STEP 4: Review ═══ */}
           {step === 4 && (
-            <div className="space-y-5">
-              <div className="flex items-center space-x-2 border-b border-slate-800 pb-3">
-                <FileText className="h-5 w-5 text-amber-500" />
-                <h3 className="text-sm sm:text-base font-bold text-white uppercase tracking-wider">Review Your Order</h3>
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-lg font-bold text-white mb-1">Review your order</h2>
+                <p className="text-sm text-slate-400">Double-check everything before proceeding to payment.</p>
               </div>
 
-              <div className="bg-slate-950/60 border border-slate-800 rounded-xl divide-y divide-slate-800">
+              <div className="bg-slate-900 border border-slate-800 rounded-xl divide-y divide-slate-800/80">
                 {[
-                  { label: 'Service Type', value: serviceType },
-                  { label: 'Subject / Field', value: subject || 'General / Unspecified' },
-                  { label: 'Academic Level', value: academicLevel },
+                  { label: 'Service', value: serviceType },
+                  { label: 'Subject', value: subject || 'General' },
+                  { label: 'Level', value: academicLevel },
                   { label: 'Deadline', value: new Date(deadline).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) },
                   { label: 'Budget', value: `${curr.symbol}${Number(budget).toLocaleString()} ${curr.currency} (≈ $${Math.round(budgetInUSD)} USD)` },
-                  { label: 'Expert Match', value: getMatchedExpert() },
-                  { label: 'Payment Mode', value: needsDownpayment ? 'To be selected (≥$100 threshold)' : 'Pay Upon Delivery (< $100)' },
-                  { label: 'Attached File', value: fileName || 'None' },
+                  { label: 'Expert', value: getMatchedExpert() },
+                  { label: 'File', value: fileName || 'None' },
                 ].map((row, i) => (
-                  <div key={i} className="flex justify-between items-start px-4 py-3 gap-3">
-                    <span className="text-xs text-slate-500 uppercase font-bold tracking-wider shrink-0 min-w-[100px]">{row.label}</span>
-                    <span className="text-xs text-white font-medium text-right">{row.value}</span>
+                  <div key={i} className="flex justify-between items-center px-4 py-3">
+                    <span className="text-xs text-slate-500 font-medium">{row.label}</span>
+                    <span className="text-sm text-white font-medium text-right max-w-[60%] truncate">{row.value}</span>
                   </div>
                 ))}
                 {description && (
                   <div className="px-4 py-3 space-y-1">
-                    <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">Description</span>
-                    <p className="text-xs text-slate-300 font-light leading-relaxed line-clamp-4">{description}</p>
+                    <span className="text-xs text-slate-500 font-medium">Description</span>
+                    <p className="text-sm text-slate-300 leading-relaxed line-clamp-3">{description}</p>
                   </div>
                 )}
               </div>
 
-              <div className="flex items-center gap-2 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
-                <ShieldCheck className="h-5 w-5 text-emerald-400 shrink-0" />
-                <p className="text-xs text-slate-300 font-light leading-relaxed">
-                  We strictly defend student confidentiality. All deliverables pass rigorous quality checks. Review above details and proceed to payment.
+              <div className="flex items-start gap-3 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                <ShieldCheck className="h-5 w-5 text-emerald-400 shrink-0 mt-0.5" />
+                <p className="text-sm text-slate-300 leading-relaxed">
+                  Your order is confidential. All work goes through quality review before delivery.
                 </p>
               </div>
             </div>
           )}
 
-          {/* ─── STEP 5: Payment ─── */}
+          {/* ═══ STEP 5: Payment ═══ */}
           {step === 5 && (
-            <div className="space-y-5">
-              <div className="flex items-center space-x-2 border-b border-slate-800 pb-3">
-                <CreditCard className="h-5 w-5 text-amber-500" />
-                <h3 className="text-sm sm:text-base font-bold text-white uppercase tracking-wider">Payment Options</h3>
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-lg font-bold text-white mb-1">How would you like to pay?</h2>
+                <p className="text-sm text-slate-400">Choose when you want to make your payment.</p>
               </div>
 
-              {/* Payment Option Cards */}
-              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
-                {/* Pay Later */}
+              {/* Pay Later / Pay Now toggle */}
+              <div className="grid grid-cols-2 gap-3">
                 <button type="button" onClick={() => setPaymentChoice('delivery')}
-                  className={`p-5 rounded-2xl border-2 text-left transition-all cursor-pointer ${paymentChoice === 'delivery' ? 'border-emerald-500 bg-emerald-500/10' : 'border-slate-800 bg-slate-950/40 hover:border-emerald-500/40'}`}>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-2xl">🚚</span>
-                    {paymentChoice === 'delivery' && <div className="h-5 w-5 rounded-full bg-emerald-500 flex items-center justify-center"><Check className="h-3 w-3 text-white" /></div>}
+                  className={`p-4 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                    paymentChoice === 'delivery'
+                      ? 'border-emerald-500 bg-emerald-500/10'
+                      : 'border-slate-800 bg-slate-900/50 hover:border-slate-700'
+                  }`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xl">🚚</span>
+                    {paymentChoice === 'delivery' && <div className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center"><Check className="h-3 w-3 text-white" /></div>}
                   </div>
-                  <h4 className="text-sm font-extrabold text-white">Pay Later</h4>
-                  <p className="text-xs text-slate-400 mt-1 font-light leading-relaxed">
-                    Submit your order now — pay only after the admin reviews and notifies you that your assignment is completed and you've seen a preview.
-                  </p>
-                  <div className="mt-3 flex items-center gap-2">
-                    <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold px-2 py-0.5 rounded">No upfront cost</span>
-                    <span className="bg-slate-800 text-slate-400 text-[10px] font-bold px-2 py-0.5 rounded">Secure escrow</span>
-                  </div>
+                  <h4 className="text-sm font-bold text-white">Pay Later</h4>
+                  <p className="text-xs text-slate-400 mt-1">Pay after you've seen the completed work.</p>
                 </button>
 
-                {/* Pay Now */}
                 <button type="button" onClick={() => setPaymentChoice('now')}
-                  className={`p-5 rounded-2xl border-2 text-left transition-all cursor-pointer ${paymentChoice === 'now' ? 'border-amber-500 bg-amber-500/10' : 'border-slate-800 bg-slate-950/40 hover:border-amber-500/40'}`}>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-2xl">⚡</span>
-                    {paymentChoice === 'now' && <div className="h-5 w-5 rounded-full bg-amber-500 flex items-center justify-center"><Check className="h-3 w-3 text-[#0F172A]" /></div>}
+                  className={`p-4 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                    paymentChoice === 'now'
+                      ? 'border-amber-500 bg-amber-500/10'
+                      : 'border-slate-800 bg-slate-900/50 hover:border-slate-700'
+                  }`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xl">⚡</span>
+                    {paymentChoice === 'now' && <div className="w-5 h-5 rounded-full bg-amber-500 flex items-center justify-center"><Check className="h-3 w-3 text-[#0F172A]" /></div>}
                   </div>
-                  <h4 className="text-sm font-extrabold text-white">Pay Now</h4>
-                  <p className="text-xs text-slate-400 mt-1 font-light leading-relaxed">
-                    Make an upfront payment to get your specialist started immediately. Remaining balance (if any) is collected after delivery.
-                  </p>
-                  <div className="mt-3 flex items-center gap-2">
-                    <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-bold px-2 py-0.5 rounded">Instant start</span>
-                    <span className="bg-slate-800 text-slate-400 text-[10px] font-bold px-2 py-0.5 rounded">Priority queue</span>
-                  </div>
+                  <h4 className="text-sm font-bold text-white">Pay Now</h4>
+                  <p className="text-xs text-slate-400 mt-1">Upfront payment to start immediately.</p>
                 </button>
               </div>
 
-              {/* Pay Now form — Ethiopia */}
+              {/* ── Pay Now: Ethiopia ── */}
               {paymentChoice === 'now' && country.toLowerCase() === 'ethiopia' && (
-                <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 sm:p-5 space-y-4 animate-in fade-in duration-150">
-                  <p className="text-xs text-slate-300">Transfer <strong className="text-amber-400">{curr.symbol}{Number(budget).toLocaleString()} {curr.currency}</strong> to our accounts:</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(['cbe', 'telebirr', 'boa'] as const).map(m => (
-                      <button key={m} type="button" onClick={() => setEthiopiaMethod(m)}
-                        className={`p-2.5 rounded-lg border flex flex-col items-center cursor-pointer transition-all text-center ${ethiopiaMethod === m ? 'border-amber-500 bg-amber-500/10 text-white font-bold' : 'border-slate-850 bg-slate-950/40 text-slate-400'}`}>
-                        <span className="text-xs uppercase">{m}</span>
-                        <span className="text-[8px] opacity-70 mt-0.5">{m === 'cbe' ? 'Comm. Bank' : m === 'telebirr' ? 'Mobile Pay' : 'Abyssinia'}</span>
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-4">
+                  <p className="text-sm text-slate-300">Transfer <strong className="text-amber-400">{curr.symbol}{Number(budget).toLocaleString()} {curr.currency}</strong> to:</p>
+
+                  {/* Method tabs */}
+                  <div className="flex gap-2">
+                    {([
+                      { key: 'cbe', label: 'CBE', sub: 'Bank' },
+                      { key: 'telebirr', label: 'Telebirr', sub: 'Mobile' },
+                      { key: 'boa', label: 'BOA', sub: 'Bank' },
+                      { key: 'crypto', label: 'Crypto', sub: '-5%' },
+                      { key: 'card', label: 'Card', sub: 'Visa/MC' },
+                    ] as const).map(m => (
+                      <button key={m.key} type="button" onClick={() => setEthiopiaMethod(m.key)}
+                        className={`flex-1 py-2 px-1 rounded-lg border text-center transition-all cursor-pointer ${
+                          ethiopiaMethod === m.key
+                            ? 'border-amber-500 bg-amber-500/10 text-white'
+                            : 'border-slate-800 bg-slate-950/50 text-slate-500 hover:border-slate-700'
+                        }`}>
+                        <span className="block text-[11px] font-bold">{m.label}</span>
+                        <span className="block text-[9px] opacity-60">{m.sub}</span>
                       </button>
                     ))}
                   </div>
-                  <div className="p-3 bg-slate-900 border border-slate-850 rounded-xl text-xs space-y-1 font-mono">
-                    {ethiopiaMethod === 'cbe' && <><p className="font-bold text-slate-200">CBE — AceScholar Academic Solutions</p><p className="text-amber-400 font-bold select-all">1000459928374</p></>}
-                    {ethiopiaMethod === 'telebirr' && <><p className="font-bold text-slate-200">Telebirr — AceScholar Solutions</p><p className="text-amber-400 font-bold select-all">7718223</p></>}
-                    {ethiopiaMethod === 'boa' && <><p className="font-bold text-slate-200">BOA — AceScholar Services Group</p><p className="text-amber-400 font-bold select-all">881920038</p></>}
+
+                  {/* Account details */}
+                  <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 font-mono text-xs space-y-1">
+                    {ethiopiaMethod === 'cbe' && paymentConfig?.ethiopia?.cbe && (
+                      <>
+                        <p className="font-bold text-slate-300">{paymentConfig.ethiopia.cbe.accountName}</p>
+                        <p className="text-amber-400 font-bold select-all text-sm">{paymentConfig.ethiopia.cbe.accountNumber}</p>
+                      </>
+                    )}
+                    {ethiopiaMethod === 'telebirr' && paymentConfig?.ethiopia?.telebirr && (
+                      <>
+                        <p className="font-bold text-slate-300">{paymentConfig.ethiopia.telebirr.name}</p>
+                        <p className="text-amber-400 font-bold select-all text-sm">{paymentConfig.ethiopia.telebirr.number}</p>
+                      </>
+                    )}
+                    {ethiopiaMethod === 'boa' && paymentConfig?.ethiopia?.boa && (
+                      <>
+                        <p className="font-bold text-slate-300">{paymentConfig.ethiopia.boa.accountName}</p>
+                        <p className="text-amber-400 font-bold select-all text-sm">{paymentConfig.ethiopia.boa.accountNumber}</p>
+                      </>
+                    )}
+                    {ethiopiaMethod === 'crypto' && paymentConfig?.crypto?.assets?.map((asset: any) =>
+                      asset.networks.map((network: any) => (
+                        <div key={`${asset.id}-${network.name}`}>
+                          <p className="font-bold text-slate-300">{asset.name} — {network.name}</p>
+                          <p className="text-amber-400 font-bold select-all text-[11px]">{network.address}</p>
+                        </div>
+                      ))
+                    )}
+                    {ethiopiaMethod === 'card' && paymentConfig?.card && (
+                      <>
+                        <p className="font-bold text-slate-300">{paymentConfig.card.holderName}</p>
+                        <p className="text-amber-400 font-bold select-all text-sm tracking-wider">{paymentConfig.card.cardNumber}</p>
+                      </>
+                    )}
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-slate-400 uppercase">Transaction Reference ID *</label>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">Transaction Reference</label>
                     <input type="text" value={ethiopiaTxRef} onChange={e => setEthiopiaTxRef(e.target.value)}
                       placeholder="e.g. TXN918237198"
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg py-2 px-3 text-slate-100 text-xs font-mono outline-none" />
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg py-2.5 px-3 text-sm text-slate-100 font-mono outline-none transition-all placeholder:text-slate-600" />
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-slate-400 uppercase">Upload Payment Screenshot *</label>
-                    <label className="flex items-center justify-center bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-amber-500 rounded-lg py-2 px-4 text-slate-300 text-xs font-semibold cursor-pointer transition-colors space-x-2">
-                      <Upload className="h-4 w-4 text-amber-500" />
-                      <span>{paymentScreenshotName || 'Upload Receipt Screenshot'}</span>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">Payment Screenshot</label>
+                    <label className="flex items-center justify-center bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-amber-500 rounded-lg py-3 px-4 text-sm text-slate-300 cursor-pointer transition-all">
+                      <Upload className="h-4 w-4 text-amber-500 mr-2" />
+                      <span>{paymentScreenshotName || 'Upload receipt'}</span>
                       <input type="file" accept="image/*" className="hidden" onChange={async e => {
                         if (e.target.files?.[0]) {
                           const f = e.target.files[0]; setPaymentScreenshotName(f.name);
@@ -764,42 +758,69 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
                 </div>
               )}
 
-              {/* Pay Now form — International */}
+              {/* ── Pay Now: International ── */}
               {paymentChoice === 'now' && country.toLowerCase() !== 'ethiopia' && (
-                <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 sm:p-5 space-y-4 animate-in fade-in duration-150">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                    <h4 className="text-xs font-bold text-white uppercase tracking-wider">Crypto Downpayment (5% Discount Applied)</h4>
-                    <span className="bg-emerald-500 text-slate-950 font-bold font-mono text-[9px] px-2 py-0.5 rounded uppercase">Save 5%</span>
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-4">
+                  {/* Method tabs */}
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setInternationalMethod('crypto')}
+                      className={`flex-1 py-2.5 rounded-lg border text-center transition-all cursor-pointer ${
+                        internationalMethod === 'crypto'
+                          ? 'border-amber-500 bg-amber-500/10 text-white'
+                          : 'border-slate-800 bg-slate-950/50 text-slate-500 hover:border-slate-700'
+                      }`}>
+                      <span className="block text-xs font-bold">Crypto</span>
+                      <span className="block text-[10px] opacity-60">-{paymentConfig?.crypto?.discountPercent || 5}% off</span>
+                    </button>
+                    <button type="button" onClick={() => setInternationalMethod('card')}
+                      className={`flex-1 py-2.5 rounded-lg border text-center transition-all cursor-pointer ${
+                        internationalMethod === 'card'
+                          ? 'border-amber-500 bg-amber-500/10 text-white'
+                          : 'border-slate-800 bg-slate-950/50 text-slate-500 hover:border-slate-700'
+                      }`}>
+                      <span className="block text-xs font-bold">Card</span>
+                      <span className="block text-[10px] opacity-60">Visa / Mastercard</span>
+                    </button>
                   </div>
-                  <div className="p-3 bg-slate-900 rounded-xl border border-slate-850 text-xs flex justify-between items-center">
-                    <div>
-                      <span className="block text-slate-500 text-[9px]">Downpayment Price (5% Off)</span>
-                      <strong className="text-emerald-400 font-mono text-sm">
-                        ${((Number(budget) || 100) / curr.exchangeRate * 0.95).toFixed(2)} USD
-                      </strong>
+
+                  {internationalMethod === 'crypto' && (
+                    <div className="space-y-3">
+                      <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 text-sm text-emerald-400 font-bold">
+                        ${((Number(budget) || 100) / curr.exchangeRate * (1 - (paymentConfig?.crypto?.discountPercent || 5) / 100)).toFixed(2)} USD <span className="text-xs font-normal opacity-70">after {paymentConfig?.crypto?.discountPercent || 5}% crypto discount</span>
+                      </div>
+                      <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 font-mono text-xs space-y-2">
+                        {paymentConfig?.crypto?.assets?.map((asset: any) =>
+                          asset.networks.map((network: any) => (
+                            <div key={`${asset.id}-${network.name}`}>
+                              <p className="font-bold text-slate-300">{asset.name} — {network.name}</p>
+                              <p className="text-amber-400 font-bold select-all text-[11px]">{network.address}</p>
+                            </div>
+                          ))
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <div className="bg-slate-900 border border-slate-850 rounded-xl p-3 text-xs space-y-2 font-mono">
-                    <div>
-                      <span className="block text-slate-500 text-[8px]">USDT Address (TRC-20)</span>
-                      <strong className="text-white text-xs select-all">TXd82PqE8YhN1x9bB8P7Kz32LqW7k3Qp5Z</strong>
+                  )}
+
+                  {internationalMethod === 'card' && paymentConfig?.card && (
+                    <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 font-mono text-xs space-y-1">
+                      <p className="text-slate-500 text-[10px] uppercase">Transfer to this card</p>
+                      <p className="font-bold text-slate-300">{paymentConfig.card.holderName}</p>
+                      <p className="text-amber-400 font-bold select-all text-sm tracking-wider">{paymentConfig.card.cardNumber}</p>
                     </div>
-                    <div>
-                      <span className="block text-slate-500 text-[8px]">Bitcoin (BTC) Address</span>
-                      <strong className="text-white text-xs select-all">1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa</strong>
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-slate-400 uppercase">Transaction Hash / Reference *</label>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">Transaction Reference</label>
                     <input type="text" value={ethiopiaTxRef} onChange={e => setEthiopiaTxRef(e.target.value)}
-                      placeholder="e.g. hash or reference number"
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg py-2 px-3 text-slate-100 text-xs font-mono outline-none" />
+                      placeholder="e.g. hash or reference"
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg py-2.5 px-3 text-sm text-slate-100 font-mono outline-none transition-all placeholder:text-slate-600" />
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-slate-400 uppercase">Upload Payment Screenshot *</label>
-                    <label className="flex items-center justify-center bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-amber-500 rounded-lg py-2 px-4 text-slate-300 text-xs font-semibold cursor-pointer transition-colors space-x-2">
-                      <Upload className="h-4 w-4 text-amber-500" />
-                      <span>{paymentScreenshotName || 'Upload Receipt Screenshot'}</span>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">Payment Screenshot</label>
+                    <label className="flex items-center justify-center bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-amber-500 rounded-lg py-3 px-4 text-sm text-slate-300 cursor-pointer transition-all">
+                      <Upload className="h-4 w-4 text-amber-500 mr-2" />
+                      <span>{paymentScreenshotName || 'Upload receipt'}</span>
                       <input type="file" accept="image/*" className="hidden" onChange={async e => {
                         if (e.target.files?.[0]) {
                           const f = e.target.files[0]; setPaymentScreenshotName(f.name);
@@ -813,33 +834,37 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
             </div>
           )}
 
-          {/* Navigation Buttons */}
-          <div className={`pt-4 border-t border-slate-800 flex items-center ${step > 1 ? 'justify-between' : 'justify-end'} gap-3`}>
-            {step > 1 && (
-              <button type="button" onClick={handleBack}
-                className="flex items-center gap-1.5 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-750 border border-slate-700 font-bold py-2.5 px-5 rounded-xl text-sm transition-all cursor-pointer">
-                <ChevronLeft className="h-4 w-4" /><span>Back</span>
-              </button>
-            )}
-
-            {step < 5 ? (
-              <button type="button" onClick={handleNext} disabled={!canProceed()}
-                className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/40 disabled:cursor-not-allowed text-[#0F172A] font-extrabold py-2.5 px-6 rounded-xl text-sm transition-all cursor-pointer shadow-lg shadow-amber-500/10">
-                <span>Next</span><ChevronRight className="h-4 w-4" />
-              </button>
-            ) : (
-              <button type="button" onClick={handleSubmit} disabled={isSubmitting || !paymentChoice}
-                className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/40 disabled:cursor-not-allowed text-[#0F172A] font-extrabold py-2.5 px-6 rounded-xl text-sm transition-all cursor-pointer shadow-lg shadow-amber-500/10">
-                {isSubmitting ? (
-                  <><span className="animate-spin inline-block h-4 w-4 border-2 border-[#0F172A] border-t-transparent rounded-full" /><span>Submitting...</span></>
-                ) : (
-                  <><ShieldCheck className="h-4 w-4" /><span>{paymentChoice === 'delivery' ? 'Confirm Order' : 'Submit & Pay'}</span></>
-                )}
-              </button>
-            )}
-          </div>
         </div>
       </div>
+
+      {/* ── Bottom Bar ── */}
+      <div className="shrink-0 border-t border-slate-800/80 bg-[#0F172A] px-4 sm:px-6 py-3">
+        <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
+          {step > 1 ? (
+            <button type="button" onClick={handleBack}
+              className="flex items-center gap-1.5 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 font-semibold py-2.5 px-5 rounded-xl text-sm transition-all cursor-pointer">
+              <ChevronLeft className="h-4 w-4" /> Back
+            </button>
+          ) : <div />}
+
+          {step < 5 ? (
+            <button type="button" onClick={handleNext} disabled={!canProceed()}
+              className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/30 disabled:cursor-not-allowed text-[#0F172A] font-bold py-2.5 px-6 rounded-xl text-sm transition-all cursor-pointer">
+              Next <ChevronRight className="h-4 w-4" />
+            </button>
+          ) : (
+            <button type="button" onClick={handleSubmit} disabled={isSubmitting || !paymentChoice}
+              className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/30 disabled:cursor-not-allowed text-[#0F172A] font-bold py-2.5 px-6 rounded-xl text-sm transition-all cursor-pointer">
+              {isSubmitting ? (
+                <><span className="animate-spin h-4 w-4 border-2 border-[#0F172A] border-t-transparent rounded-full" /> Submitting...</>
+              ) : (
+                <><ShieldCheck className="h-4 w-4" /> {paymentChoice === 'delivery' ? 'Place Order' : 'Submit & Pay'}</>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+
     </div>
   );
 }

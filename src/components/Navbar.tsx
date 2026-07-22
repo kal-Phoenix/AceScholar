@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Menu, X, GraduationCap, LayoutDashboard, ShieldCheck, LogOut, FileText, Globe } from 'lucide-react';
+import { Menu, X, GraduationCap, LayoutDashboard, ShieldCheck, LogOut, FileText } from 'lucide-react';
 import { PageType, Profile } from '../types';
 
 interface NavbarProps {
@@ -17,7 +17,7 @@ interface NavbarProps {
   };
 }
 
-export default function Navbar({ currentPage, setCurrentPage, user, onLogout, detectedLocation }: NavbarProps) {
+export default function Navbar({ currentPage, setCurrentPage, user, onLogout }: NavbarProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const navLinks = [

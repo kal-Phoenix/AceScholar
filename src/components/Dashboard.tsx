@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { LayoutDashboard, FileText, Clock, AlertCircle, RefreshCw, Send, CheckCircle2, MessageSquare, Download, HelpCircle, GraduationCap, ShieldCheck, Check, X, Upload, Trash2, Paperclip } from 'lucide-react';
+import { LayoutDashboard, FileText, Clock, AlertCircle, RefreshCw, Send, CheckCircle2, MessageSquare, Download, HelpCircle, GraduationCap, Check, X, Upload, Trash2, Paperclip } from 'lucide-react';
 import { PageType, Profile, Order as AcademicOrder, Message } from '../types';
 import { fallbackDb, getAuthHeaders } from '../lib/supabase';
 
@@ -7,11 +7,10 @@ interface DashboardProps {
   user: Profile | null;
   setCurrentPage: (page: PageType) => void;
   showToast?: (message: string, type: 'success' | 'error') => void;
-  onPayOrder?: (orderId: string) => void;
   setUser?: (user: Profile | null) => void;
 }
 
-export default function Dashboard({ user, setCurrentPage, showToast, onPayOrder, setUser }: DashboardProps) {
+export default function Dashboard({ user, setCurrentPage, showToast, setUser }: DashboardProps) {
   const [orders, setOrders] = useState<AcademicOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<AcademicOrder | null>(null);
@@ -27,11 +26,14 @@ export default function Dashboard({ user, setCurrentPage, showToast, onPayOrder,
   const [activeTab, setActiveTab] = useState<'status' | 'chat' | 'specs' | 'payment'>('status');
 
   // Payment proof states
-  const [paymentMethodType, setPaymentMethodType] = useState<'ethiopia' | 'crypto'>('ethiopia');
+  const [paymentMethodType, setPaymentMethodType] = useState<'ethiopia' | 'crypto' | 'card'>('ethiopia');
   const [ethiopianBank, setEthiopianBank] = useState<'cbe' | 'telebirr' | 'boa'>('cbe');
   const [paymentScreenshot, setPaymentScreenshot] = useState('');
   const [paymentScreenshotName, setPaymentScreenshotName] = useState('');
   const [isSubmittingPaymentProof, setIsSubmittingPaymentProof] = useState(false);
+
+  // Payment config from server (bank details, crypto addresses, etc.)
+  const [paymentConfig, setPaymentConfig] = useState<any>(null);
 
   // Become an Expert Modal State
   const [showBecomeExpertModal, setShowBecomeExpertModal] = useState(false);
@@ -44,6 +46,12 @@ export default function Dashboard({ user, setCurrentPage, showToast, onPayOrder,
   const [expertGpa, setExpertGpa] = useState('');
   const [expertDocuments, setExpertDocuments] = useState<Array<{ name: string; size?: number; type?: string; content?: string }>>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -144,6 +152,14 @@ export default function Dashboard({ user, setCurrentPage, showToast, onPayOrder,
     }
   }, [user]);
 
+  // Fetch payment config from server
+  useEffect(() => {
+    fetch('/api/payments/config')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => { if (data) setPaymentConfig(data); })
+      .catch(() => {});
+  }, []);
+
   const handleBecomeExpertSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -197,11 +213,12 @@ export default function Dashboard({ user, setCurrentPage, showToast, onPayOrder,
       if (data.success && data.profile) {
         if (showToast) showToast('Congratulations! Your application has been submitted and is pending admin approval.', 'success');
         
-        // Update user state in App.tsx
+        // Merge to preserve access_token (not returned by become-expert endpoint)
+        const updatedProfile = { ...user, ...data.profile };
         if (setUser) {
-          setUser(data.profile);
+          setUser(updatedProfile);
         } else {
-          localStorage.setItem('ace_scholar_current_user', JSON.stringify(data.profile));
+          localStorage.setItem('ace_scholar_current_user', JSON.stringify(updatedProfile));
         }
 
         setShowBecomeExpertModal(false);
@@ -222,7 +239,8 @@ export default function Dashboard({ user, setCurrentPage, showToast, onPayOrder,
     if (!user) return;
     setIsLoading(true);
     try {
-      const allOrders = await fallbackDb.getOrders();
+      const ordersResult = await fallbackDb.getOrders(1, 500);
+      const allOrders = ordersResult.data;
       // Filter orders by current user email (case insensitive)
       const clientOrders = allOrders.filter(
         o => o.client_email.toLowerCase() === user.email.toLowerCase()
@@ -382,17 +400,6 @@ export default function Dashboard({ user, setCurrentPage, showToast, onPayOrder,
       setShowRevisionForm(false);
       if (showToast) showToast('Revision guidelines submitted to your specialist!', 'success');
 
-      // Auto coordinator reply after short delay
-      setTimeout(async () => {
-        const autoReply = await fallbackDb.postMessage({
-          order_id: selectedOrder.id,
-          sender_name: 'Academic Coordinator Desk',
-          content: 'Understood. We have locked in your revision request. Our coordinating panel is re-aligning specifications with the expert specialist to implement changes. Re-delivery will be expedited.',
-          is_admin: true,
-        });
-        if (autoReply) setMessages(prev => [...prev, autoReply]);
-      }, 1500);
-
     } catch (e) {
       console.error('Failed to submit revision:', e);
       if (showToast) showToast('Failed to submit revision guidelines.', 'error');
@@ -442,7 +449,6 @@ export default function Dashboard({ user, setCurrentPage, showToast, onPayOrder,
         throw new Error(errData.error || 'Failed to submit payment proof to backend.');
       }
 
-      const data = await res.json();
       if (showToast) showToast('Payment proof submitted successfully! Awaiting coordinator approval.', 'success');
 
       // Post notification to chat
@@ -848,11 +854,6 @@ export default function Dashboard({ user, setCurrentPage, showToast, onPayOrder,
                 >
                   <MessageSquare className="h-4 w-4" />
                   <span>2. Chat with Admin</span>
-                  {messages.length > 0 && (
-                    <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-extrabold text-white">
-                      {messages.length}
-                    </span>
-                  )}
                 </button>
                 <button
                   onClick={() => setActiveTab('specs')}
@@ -867,14 +868,6 @@ export default function Dashboard({ user, setCurrentPage, showToast, onPayOrder,
                 </button>
               </div>
 
-              {/* Instant support notification in the tab-bar */}
-              <div className="hidden md:flex items-center space-x-1.5 text-[11px] text-slate-400 font-medium">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-                <span>Active Coordinator Sync</span>
-              </div>
             </div>
 
             {/* Modal Content - Dynamic Tab Rendering */}
@@ -1303,88 +1296,118 @@ export default function Dashboard({ user, setCurrentPage, showToast, onPayOrder,
                                   Crypto
                                   <span className="bg-emerald-500 text-slate-950 font-mono text-[9px] px-1 py-0.5 rounded font-extrabold">-5%</span>
                                 </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setPaymentMethodType('card');
+                                  }}
+                                  className={`p-3 rounded-xl border text-xs font-bold transition-all text-center ${
+                                    paymentMethodType === 'card'
+                                      ? 'bg-amber-500/10 text-amber-400 border-amber-500'
+                                      : 'bg-slate-950 border-slate-850 text-slate-400 hover:text-white'
+                                  }`}
+                                >
+                                  Card
+                                </button>
                               </div>
                             </div>
 
-                            {/* Instructions panel */}
+                            {/* Instructions panel — values from server config */}
                             <div className="bg-slate-950 border border-slate-850 rounded-xl p-4 space-y-4 text-xs">
-                              {paymentMethodType === 'ethiopia' && ethiopianBank === 'cbe' && (
+                              {paymentMethodType === 'ethiopia' && ethiopianBank === 'cbe' && paymentConfig?.ethiopia?.cbe && (
                                 <div className="space-y-3">
                                   <h6 className="font-bold text-white uppercase tracking-wider text-[10px]">Commercial Bank of Ethiopia (CBE)</h6>
                                   <div className="bg-slate-900 p-3 rounded-xl border border-amber-500/30 space-y-1 font-mono">
                                     <span className="block text-slate-400 text-[9px] uppercase font-bold">CBE Account Number</span>
                                     <div className="flex items-center justify-between gap-2">
-                                      <strong className="text-white text-sm select-all tracking-widest font-bold">1000123456789</strong>
+                                      <strong className="text-white text-sm select-all tracking-widest font-bold">{paymentConfig.ethiopia.cbe.accountNumber}</strong>
                                       <span className="text-[9px] text-slate-500">Account No.</span>
                                     </div>
-                                    <span className="block text-slate-400 text-[9px] mt-1">Account Name: <span className="text-white font-semibold">Ace Scholar Services</span></span>
+                                    <span className="block text-slate-400 text-[9px] mt-1">Account Name: <span className="text-white font-semibold">{paymentConfig.ethiopia.cbe.accountName}</span></span>
                                   </div>
                                 </div>
                               )}
 
-                              {paymentMethodType === 'ethiopia' && ethiopianBank === 'telebirr' && (
+                              {paymentMethodType === 'ethiopia' && ethiopianBank === 'telebirr' && paymentConfig?.ethiopia?.telebirr && (
                                 <div className="space-y-3">
                                   <h6 className="font-bold text-white uppercase tracking-wider text-[10px]">Telebirr Mobile Wallet</h6>
                                   <div className="bg-slate-900 p-3 rounded-xl border border-amber-500/30 space-y-1 font-mono">
                                     <span className="block text-slate-400 text-[9px] uppercase font-bold">Telebirr Wallet Number</span>
                                     <div className="flex items-center justify-between gap-2">
-                                      <strong className="text-white text-sm select-all tracking-widest font-bold">+251911223344</strong>
+                                      <strong className="text-white text-sm select-all tracking-widest font-bold">{paymentConfig.ethiopia.telebirr.number}</strong>
                                       <span className="text-[9px] text-slate-500">Phone No.</span>
                                     </div>
-                                    <span className="block text-slate-400 text-[9px] mt-1">Registered Name: <span className="text-white font-semibold">Ace Scholar Services</span></span>
+                                    <span className="block text-slate-400 text-[9px] mt-1">Registered Name: <span className="text-white font-semibold">{paymentConfig.ethiopia.telebirr.name}</span></span>
                                   </div>
                                 </div>
                               )}
 
-                              {paymentMethodType === 'ethiopia' && ethiopianBank === 'boa' && (
+                              {paymentMethodType === 'ethiopia' && ethiopianBank === 'boa' && paymentConfig?.ethiopia?.boa && (
                                 <div className="space-y-3">
                                   <h6 className="font-bold text-white uppercase tracking-wider text-[10px]">Bank of Abyssinia (BOA)</h6>
                                   <div className="bg-slate-900 p-3 rounded-xl border border-amber-500/30 space-y-1 font-mono">
                                     <span className="block text-slate-400 text-[9px] uppercase font-bold">BOA Account Number</span>
                                     <div className="flex items-center justify-between gap-2">
-                                      <strong className="text-white text-sm select-all tracking-widest font-bold">0123456789101</strong>
+                                      <strong className="text-white text-sm select-all tracking-widest font-bold">{paymentConfig.ethiopia.boa.accountNumber}</strong>
                                       <span className="text-[9px] text-slate-500">Account No.</span>
                                     </div>
-                                    <span className="block text-slate-400 text-[9px] mt-1">Account Name: <span className="text-white font-semibold">Ace Scholar Services</span></span>
+                                    <span className="block text-slate-400 text-[9px] mt-1">Account Name: <span className="text-white font-semibold">{paymentConfig.ethiopia.boa.accountName}</span></span>
                                   </div>
                                 </div>
                               )}
 
-                              {paymentMethodType === 'crypto' && (
+                              {paymentMethodType === 'crypto' && paymentConfig?.crypto && (
                                 <div className="space-y-3">
                                   <div className="flex justify-between items-center">
                                     <h6 className="font-bold text-white uppercase tracking-wider text-[10px]">Crypto Payment Instructions</h6>
-                                    <span className="bg-emerald-500 text-slate-950 font-bold font-mono text-[9px] px-2 py-0.5 rounded uppercase">5% Discount Applied</span>
+                                    <span className="bg-emerald-500 text-slate-950 font-bold font-mono text-[9px] px-2 py-0.5 rounded uppercase">{paymentConfig.crypto.discountPercent}% Discount Applied</span>
                                   </div>
                                   <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800/80 flex justify-between items-center">
                                     <div>
-                                      <span className="block text-slate-500 text-[9px]">Calculated Price (5% Off)</span>
+                                      <span className="block text-slate-500 text-[9px]">Calculated Price ({paymentConfig.crypto.discountPercent}% Off)</span>
                                       <strong className="text-emerald-400 font-mono text-base">
-                                        ${((selectedOrder.agreed_price || selectedOrder.total_amount || 100) * 0.95).toFixed(2)} USD
+                                        ${((selectedOrder.agreed_price || selectedOrder.total_amount || 100) * (1 - paymentConfig.crypto.discountPercent / 100)).toFixed(2)} USD
                                       </strong>
                                     </div>
                                     <div className="text-right">
                                       <span className="block text-slate-500 text-[9px]">Save Amount</span>
                                       <strong className="text-slate-300 font-mono">
-                                        ${((selectedOrder.agreed_price || selectedOrder.total_amount || 100) * 0.05).toFixed(2)} USD
+                                        ${((selectedOrder.agreed_price || selectedOrder.total_amount || 100) * (paymentConfig.crypto.discountPercent / 100)).toFixed(2)} USD
                                       </strong>
                                     </div>
                                   </div>
                                   <p className="text-slate-300 leading-relaxed font-light mt-1">
-                                    Send the discounted amount to our verified USDT (TRC-20) or Bitcoin address below:
+                                    Send the discounted amount to one of our verified crypto addresses below:
                                   </p>
                                   <div className="space-y-2 font-mono">
-                                    <div className="bg-slate-900 p-2.5 rounded border border-slate-800/80 flex items-center justify-between gap-2">
-                                      <div className="min-w-0 flex-1">
-                                        <span className="block text-slate-500 text-[9px]">USDT Address (TRC-20)</span>
-                                        <strong className="text-white text-[11px] truncate block select-all">TXd82PqE8YhN1x9bB8P7Kz32LqW7k3Qp5Z</strong>
-                                      </div>
+                                    {paymentConfig.crypto.assets?.map((asset: any) =>
+                                      asset.networks.map((network: any) => (
+                                        <div key={`${asset.id}-${network.name}`} className="bg-slate-900 p-2.5 rounded border border-slate-800/80 flex items-center justify-between gap-2">
+                                          <div className="min-w-0 flex-1">
+                                            <span className="block text-slate-500 text-[9px]">{asset.icon || ''} {asset.name} ({asset.symbol}) — {network.name}</span>
+                                            <strong className="text-white text-[11px] truncate block select-all">{network.address}</strong>
+                                          </div>
+                                        </div>
+                                      ))
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {paymentMethodType === 'card' && paymentConfig?.card && (
+                                <div className="space-y-3">
+                                  <h6 className="font-bold text-white uppercase tracking-wider text-[10px]">Credit / Debit Card Transfer</h6>
+                                  <p className="text-slate-300 leading-relaxed font-light">
+                                    Copy the card details below and complete the transfer from your banking app:
+                                  </p>
+                                  <div className="bg-slate-900 p-3 rounded-xl border border-slate-800/80 space-y-2 font-mono">
+                                    <div>
+                                      <span className="block text-slate-500 text-[9px]">Card Number</span>
+                                      <strong className="text-white text-sm select-all tracking-wider">{paymentConfig.card.cardNumber}</strong>
                                     </div>
-                                    <div className="bg-slate-900 p-2.5 rounded border border-slate-800/80 flex items-center justify-between gap-2">
-                                      <div className="min-w-0 flex-1">
-                                        <span className="block text-slate-500 text-[9px]">Bitcoin (BTC) Address</span>
-                                        <strong className="text-white text-[11px] truncate block select-all">1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa</strong>
-                                      </div>
+                                    <div>
+                                      <span className="block text-slate-500 text-[9px]">Card Holder</span>
+                                      <strong className="text-white text-xs">{paymentConfig.card.holderName}</strong>
                                     </div>
                                   </div>
                                 </div>

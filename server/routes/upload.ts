@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import { supabaseAdmin, supabaseUrl } from '../lib/supabase.js';
-import { safeString, InputError } from '../lib/validation.js';
-import { deriveRole } from '../lib/utils.js';
+import { safeString } from '../lib/validation.js';
+import { getRequesterProfile } from '../lib/utils.js';
 
 const router = Router();
 
@@ -21,23 +21,6 @@ const ALLOWED_EXTENSIONS = new Set([
   'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'pdf',
   'doc', 'docx', 'xls', 'xlsx', 'txt', 'zip',
 ]);
-
-async function getRequesterProfile(req: Request): Promise<any> {
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.slice(7);
-    if (token) {
-      const { supabase } = await import('../lib/supabase.js');
-      const { data: { user: authUser }, error } = await supabase.auth.getUser(token);
-      if (error || !authUser) return null;
-      const email = authUser.email?.toLowerCase().trim();
-      if (!email) return null;
-      const role = deriveRole(email, authUser.user_metadata?.role);
-      return { id: authUser.id, email, full_name: authUser.user_metadata?.full_name || email.split('@')[0], role, created_at: authUser.created_at };
-    }
-  }
-  return null;
-}
 
 async function uploadBase64FileToStorage(base64Data: string, fileName: string): Promise<string> {
   let mimeType = 'application/octet-stream';

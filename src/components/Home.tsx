@@ -1,4 +1,4 @@
-import { ArrowRight, BookOpen, Code, Layers, BarChart3, Binary, Presentation, ShieldCheck, Clock, Users, Globe, ChevronRight } from 'lucide-react';
+import { ArrowRight, BookOpen, Code, Layers, BarChart3, Binary, Presentation, ShieldCheck, Users, ChevronRight } from 'lucide-react';
 import { PageType, Profile } from '../types';
 
 interface HomeProps {
@@ -66,27 +66,6 @@ export default function Home({ setCurrentPage, user }: HomeProps) {
     },
   ];
 
-  const testimonials = [
-    {
-      quote: "The MATLAB simulation and CAD blueprints they built for my mechanical arm project were absolutely spotless. Highly professional work and saved me weeks.",
-      name: "Jean-Pierre Laurent",
-      country: "France",
-      subject: "BSc Mechanical Engineering"
-    },
-    {
-      quote: "My literature review draft came back 3 days early with rigorous citations and academic sources. Incredible attention to APA formatting guidelines.",
-      name: "Sophia Martinez",
-      country: "United States",
-      subject: "MSc Environmental Science"
-    },
-    {
-      quote: "An absolute lifesaver. The React client-server app built for my final project was fully commented, clean, and accompanied by a detailed PDF installation guide.",
-      name: "Ahmed Al-Mansoor",
-      country: "Saudi Arabia",
-      subject: "BSc Computer Science"
-    }
-  ];
-
   return (
     <div className="bg-[#0F172A] font-sans text-slate-100 overflow-hidden" id="homepage-container">
       
@@ -140,44 +119,7 @@ export default function Home({ setCurrentPage, user }: HomeProps) {
         </div>
       </section>
  
-      {/* 3. TRUST BAR */}
-      <section className="bg-white text-[#0F172A] py-6 sm:py-10 shadow-md">
-        <div className="max-w-7xl xl:max-w-[90%] 2xl:max-w-[95%] mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-8 text-center divide-y md:divide-y-0 md:divide-x divide-slate-100">
-            
-            <div className="space-y-0.5 sm:space-y-1">
-              <p className="text-2xl sm:text-4xl font-extrabold text-[#0F172A]">
-                500<span className="text-amber-500">+</span>
-              </p>
-              <p className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider">Projects Delivered</p>
-            </div>
- 
-            <div className="space-y-0.5 sm:space-y-1 pt-4 md:pt-0">
-              <p className="text-2xl sm:text-4xl font-extrabold text-[#0F172A]">
-                48<span className="text-amber-500">hr</span>
-              </p>
-              <p className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider">Average Delivery</p>
-            </div>
- 
-            <div className="space-y-0.5 sm:space-y-1 pt-4 md:pt-0">
-              <p className="text-2xl sm:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-[#0F172A] to-slate-800">
-                100<span className="text-amber-500">%</span>
-              </p>
-              <p className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider">Confidential</p>
-            </div>
- 
-            <div className="space-y-0.5 sm:space-y-1 pt-4 md:pt-0">
-              <p className="text-2xl sm:text-4xl font-extrabold text-[#0F172A]">
-                10<span className="text-amber-500">+</span>
-              </p>
-              <p className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider">Subjects Covered</p>
-            </div>
- 
-          </div>
-        </div>
-      </section>
- 
-      {/* 4. SERVICES SNAPSHOT */}
+      {/* 3. SERVICES SNAPSHOT */}
       <section className="py-10 sm:py-16 md:py-20 max-w-7xl xl:max-w-[90%] 2xl:max-w-[95%] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center space-y-2 sm:space-y-3 mb-8 sm:mb-14">
           <h2 className="text-xl sm:text-3xl md:text-4xl font-bold tracking-tight text-white">
@@ -251,43 +193,7 @@ export default function Home({ setCurrentPage, user }: HomeProps) {
         </div>
       </section>
  
-      {/* 6. TESTIMONIALS */}
-      <section className="py-10 sm:py-16 md:py-20 max-w-7xl xl:max-w-[90%] 2xl:max-w-[95%] mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center space-y-2 sm:space-y-3 mb-8 sm:mb-14">
-          <h2 className="text-xl sm:text-3xl md:text-4xl font-bold tracking-tight text-white">
-            Trusted by Students Worldwide
-          </h2>
-          <div className="h-1 w-16 sm:w-20 bg-amber-500 mx-auto rounded"></div>
-          <p className="text-slate-400 max-w-xl mx-auto text-xs sm:text-sm">
-            Client confidentiality prevents using full university identities. Reviews are authenticated internally.
-          </p>
-        </div>
- 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-8">
-          {testimonials.map((t, idx) => (
-            <div key={idx} className="bg-slate-900/50 border border-slate-800/80 p-5 sm:p-8 rounded-2xl flex flex-col justify-between relative">
-              <span className="absolute top-2 right-4 sm:top-4 sm:right-6 text-5xl sm:text-7xl font-serif text-slate-800 select-none pointer-events-none">
-                &ldquo;
-              </span>
-              <p className="text-xs sm:text-sm text-slate-300 italic leading-relaxed relative z-10 mb-4 sm:mb-6">
-                &ldquo;{t.quote}&rdquo;
-              </p>
-              <div className="border-t border-slate-800/80 pt-3 sm:pt-4 flex items-center justify-between">
-                <div>
-                  <h4 className="font-bold text-xs sm:text-sm text-white">{t.name}</h4>
-                  <p className="text-[10px] sm:text-[11px] text-amber-500 uppercase tracking-wider font-semibold">{t.subject}</p>
-                </div>
-                <div className="flex items-center space-x-1 bg-slate-800 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded text-[10px] sm:text-[11px] text-slate-400">
-                  <Globe className="h-3 w-3" />
-                  <span>{t.country}</span>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
- 
-      {/* 7. FINAL CTA BANNER */}
+      {/* 5. FINAL CTA BANNER */}
       <section className="bg-gradient-to-r from-[#1E293B] to-[#0F172A] border-t border-slate-800 text-center py-10 sm:py-16 px-4">
         <div className="max-w-4xl mx-auto space-y-4 sm:space-y-6">
           <h2 className="text-2xl sm:text-3xl font-extrabold text-white md:text-4xl">

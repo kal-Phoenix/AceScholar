@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
-import { supabase, db } from '../lib/supabase.js';
-import { safeString, isValidEmail, InputError } from '../lib/validation.js';
-import { deriveRole } from '../lib/utils.js';
+import { supabaseAdmin, db } from '../lib/supabase.js';
+import { safeString, isValidEmail } from '../lib/validation.js';
+import { deriveRole, getRequesterProfile } from '../lib/utils.js';
 
 const router = Router();
 
@@ -10,12 +10,13 @@ const router = Router();
 let userCache: { users: any[]; fetchedAt: number } = { users: [], fetchedAt: 0 };
 const USER_CACHE_TTL_MS = 60_000;
 
-async function getCachedUsers(): Promise<any[]> {
+export async function getCachedUsers(): Promise<any[]> {
   const now = Date.now();
   if (userCache.users.length > 0 && (now - userCache.fetchedAt) < USER_CACHE_TTL_MS) {
     return userCache.users;
   }
-  const { data, error } = await supabase.auth.admin.listUsers();
+  const adminClient = supabaseAdmin || db;
+  const { data, error } = await adminClient.auth.admin.listUsers();
   if (error) {
     console.error('getCachedUsers: listUsers failed:', error.message);
     return userCache.users;
@@ -29,22 +30,6 @@ export function invalidateUserCache() {
   userCache.fetchedAt = 0;
 }
 
-async function getRequesterProfile(req: Request): Promise<any> {
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.slice(7);
-    if (token) {
-      const { data: { user: authUser }, error } = await supabase.auth.getUser(token);
-      if (error || !authUser) return null;
-      const email = authUser.email?.toLowerCase().trim();
-      if (!email) return null;
-      const role = deriveRole(email, authUser.user_metadata?.role);
-      return { id: authUser.id, email, full_name: authUser.user_metadata?.full_name || email.split('@')[0], role, created_at: authUser.created_at };
-    }
-  }
-  return null;
-}
-
 // GET all profiles (admin only)
 router.get('/', async (req: Request, res: Response) => {
   try {
@@ -52,10 +37,19 @@ router.get('/', async (req: Request, res: Response) => {
     if (!requester || requester.role !== 'admin')
       return res.status(403).json({ error: 'Unauthorized. Admin credentials required.' });
 
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
+    const offset = (page - 1) * limit;
+
+    const { count } = await db
+      .from('profiles')
+      .select('*', { count: 'exact', head: true });
+
     const { data: profileRows, error: profileErr } = await db
       .from('profiles')
       .select('*')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
 
     if (profileErr) {
       console.error('GET /api/profiles query error:', profileErr.message);
@@ -85,7 +79,7 @@ router.get('/', async (req: Request, res: Response) => {
         created_at: p.created_at
       };
     });
-    res.json(profiles);
+    res.json({ data: profiles, total: count || 0, page, limit });
   } catch (err) {
     res.status(500).json({ error: 'Internal server error while fetching profiles' });
   }
@@ -124,7 +118,7 @@ router.post('/', async (req: Request, res: Response) => {
     }
 
     const tempPassword = crypto.randomUUID() + 'A1!';
-    const { data, error } = await supabase.auth.admin.createUser({
+    const { data, error } = await (supabaseAdmin || db).auth.admin.createUser({
       email: emailLower,
       password: tempPassword,
       email_confirm: true,
@@ -188,7 +182,7 @@ router.post('/become-expert', async (req: Request, res: Response) => {
       expert_documents: documents,
     };
 
-    const { data, error } = await supabase.auth.admin.updateUserById(userId, {
+    const { data, error } = await (supabaseAdmin || db).auth.admin.updateUserById(userId, {
       user_metadata: updates
     });
 
@@ -260,7 +254,7 @@ router.post('/approve-expert', async (req: Request, res: Response) => {
       expert_status: 'approved'
     };
 
-    const { data, error } = await supabase.auth.admin.updateUserById(targetUser.id, {
+    const { error } = await (supabaseAdmin || db).auth.admin.updateUserById(targetUser.id, {
       user_metadata: updates
     });
 
@@ -303,7 +297,7 @@ router.post('/reject-expert', async (req: Request, res: Response) => {
       expert_status: 'rejected'
     };
 
-    const { data, error } = await supabase.auth.admin.updateUserById(targetUser.id, {
+    const { error } = await (supabaseAdmin || db).auth.admin.updateUserById(targetUser.id, {
       user_metadata: updates
     });
 
@@ -353,7 +347,7 @@ router.put('/:profileId/role', async (req: Request, res: Response) => {
       role: newRole
     };
 
-    const { data, error } = await supabase.auth.admin.updateUserById(targetProfileId, {
+    const { data, error } = await (supabaseAdmin || db).auth.admin.updateUserById(targetProfileId, {
       user_metadata: updates
     });
 

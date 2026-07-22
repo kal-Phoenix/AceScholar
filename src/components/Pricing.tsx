@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { DollarSign, Clock, FileText, Check, HelpCircle, ChevronDown, Send } from 'lucide-react';
+import { Clock, FileText, Check, HelpCircle, ChevronDown, Send } from 'lucide-react';
 import { PageType } from '../types';
 import { fallbackDb } from '../lib/supabase';
 
@@ -61,7 +61,7 @@ export default function Pricing({ setCurrentPage, setSelectedServiceType, showTo
       serviceName: 'Academic Writing',
       tiers: [
         { name: 'Basic', range: '$20–$40', desc: 'Up to 5 pages of written work', delivery: '48hr delivery', bullets: ['Custom research scope', 'APA/Harvard citations', 'Fully edited report', 'Turnitin pass report'] },
-        { name: 'Standard', range: '$40–$80', desc: '5–15 pages of deep analysis', delivery: '72hr delivery', bullets: ['Advanced research scope', 'Peer-reviewed sources', 'Comprehensive structuring', 'High-priority processing'], popular: true },
+        { name: 'Standard', range: '$40–$80', desc: '5–15 pages of deep analysis', delivery: '72hr delivery', bullets: ['Advanced research scope', 'Peer-reviewed sources', 'Comprehensive structuring', 'High-priority processing'] },
         { name: 'Premium', range: '$80–$200+', desc: '15+ pages or full thesis', delivery: 'Custom timeline', bullets: ['PhD level specialists', 'Complete thesis drafts', 'Detailed raw datasets', 'Direct writer communication'] }
       ]
     },
@@ -70,7 +70,7 @@ export default function Pricing({ setCurrentPage, setSelectedServiceType, showTo
       serviceName: 'Coding Project',
       tiers: [
         { name: 'Basic', range: '$20–$40', desc: 'Simple scripts and functions', delivery: '24hr delivery', bullets: ['Single script file', 'Code syntax review', 'Execution comments', '1-day turnaround'] },
-        { name: 'Standard', range: '$50–$100', desc: 'Full app with documentation', delivery: '48hr delivery', bullets: ['Multi-file projects', 'Detailed PDF install guide', 'Fully verified test cases', 'Clean architectural separation'], popular: true },
+        { name: 'Standard', range: '$50–$100', desc: 'Full app with documentation', delivery: '48hr delivery', bullets: ['Multi-file projects', 'Detailed PDF install guide', 'Fully verified test cases', 'Clean architectural separation'] },
         { name: 'Premium', range: '$100–$300+', desc: 'Complex systems & servers', delivery: 'Custom timeline', bullets: ['Full-stack implementations', 'Robust error logging', 'Database persistence included', 'Live Zoom code walkthrough'] }
       ]
     },
@@ -79,7 +79,7 @@ export default function Pricing({ setCurrentPage, setSelectedServiceType, showTo
       serviceName: 'Engineering Drawing',
       tiers: [
         { name: 'Basic', range: '$20–$40', desc: '1–2 standard CAD drafts', delivery: '48hr delivery', bullets: ['2D projection designs', 'PDF/DXF formats', 'Exact dimensions', 'Geometric tolerances'] },
-        { name: 'Standard', range: '$50–$100', desc: '3–5 drawings & assemblies', delivery: '72hr delivery', bullets: ['3D SolidWorks source files', 'Exploded views', 'Materials list (BOM)', 'Structural reports included'], popular: true },
+        { name: 'Standard', range: '$50–$100', desc: '3–5 drawings & assemblies', delivery: '72hr delivery', bullets: ['3D SolidWorks source files', 'Exploded views', 'Materials list (BOM)', 'Structural reports included'] },
         { name: 'Premium', range: '$100–$250+', desc: 'Full custom engine/project set', delivery: 'Custom timeline', bullets: ['Complete structural assembly', 'FEA stress test simulation', 'Parametric sheet modeling', 'Academic design manual'] }
       ]
     },
@@ -88,7 +88,7 @@ export default function Pricing({ setCurrentPage, setSelectedServiceType, showTo
       serviceName: 'Data Analysis',
       tiers: [
         { name: 'Basic', range: '$20–$35', desc: 'Simple charts & summaries', delivery: '24hr delivery', bullets: ['Basic cleaning & filter', 'Descriptive tables', 'PNG/SVG visuals', 'Simple interpretation guide'] },
-        { name: 'Standard', range: '$40–$80', desc: 'Full report & interpretation', delivery: '48hr delivery', bullets: ['SPSS / R / Python source', 'Hypothesis testing', 'Linear correlation testing', 'Detailed methodology block'], popular: true },
+        { name: 'Standard', range: '$40–$80', desc: 'Full report & interpretation', delivery: '48hr delivery', bullets: ['SPSS / R / Python source', 'Hypothesis testing', 'Linear correlation testing', 'Detailed methodology block'] },
         { name: 'Premium', range: '$80–$200+', desc: 'Advanced statistical metrics', delivery: 'Custom timeline', bullets: ['Predictive machine modeling', 'Interactive bento dashboard', 'Clean markdown report', 'Custom data generation steps'] }
       ]
     },
@@ -97,7 +97,7 @@ export default function Pricing({ setCurrentPage, setSelectedServiceType, showTo
       serviceName: 'STEM',
       tiers: [
         { name: 'Basic', range: '$15–$30', desc: 'Calculus, algebra or quick slides', delivery: '24hr delivery', bullets: ['Formula-by-formula derivation', 'PDF scan of handwritten proofs', '10 PowerPoint slides', 'Basic outline formatting'] },
-        { name: 'Standard', range: '$30–$60', desc: 'Physics / biochem solver or full deck', delivery: '48hr delivery', bullets: ['Simulation code files included', 'Step-by-step rigorous text', '20 highly designed slides', 'Custom charts and vector icons'], popular: true },
+        { name: 'Standard', range: '$30–$60', desc: 'Physics / biochem solver or full deck', delivery: '48hr delivery', bullets: ['Simulation code files included', 'Step-by-step rigorous text', '20 highly designed slides', 'Custom charts and vector icons'] },
         { name: 'Premium', range: '$60–$120+', desc: 'PhD proofs or investor decks', delivery: 'Custom timeline', bullets: ['Advanced research standards', 'Interactive canvas plots', 'Investor pitch-level layout', 'Speaker notes script included'] }
       ]
     }
@@ -141,18 +141,13 @@ export default function Pricing({ setCurrentPage, setSelectedServiceType, showTo
       return;
     }
 
-    // Store in Contact Messages fallbacks as quote requests
-    const messages = await fallbackDb.getContactMessages();
-    messages.push({
-      id: 'quote-' + Date.now(),
+    // Store in Contact Messages as quote requests
+    await fallbackDb.postContactMessage({
       name: quoteName,
       email: quoteEmail,
       subject: `Quote Request: ${quoteDeadline || 'No specified deadline'}`,
       message: quoteDesc,
-      is_read: false,
-      created_at: new Date().toISOString()
     });
-    await fallbackDb.setContactMessages(messages);
 
     setQuoteName('');
     setQuoteEmail('');
@@ -205,18 +200,8 @@ export default function Pricing({ setCurrentPage, setSelectedServiceType, showTo
           {pricingCategories[activeCategory].tiers.map((tier, idx) => (
             <div
               key={idx}
-              className={`relative bg-slate-900/60 border rounded-2xl p-5 sm:p-8 flex flex-col justify-between transition-all duration-300 ${
-                tier.popular 
-                  ? 'border-amber-500 shadow-xl shadow-amber-500/5 ring-1 ring-amber-500/20' 
-                  : 'border-slate-800 hover:border-slate-700'
-              }`}
+              className="relative bg-slate-900/60 border border-slate-800 hover:border-slate-700 rounded-2xl p-5 sm:p-8 flex flex-col justify-between transition-all duration-300"
             >
-              {tier.popular && (
-                <span className="absolute top-0 right-1/2 transform translate-x-1/2 -translate-y-1/2 bg-amber-500 text-[#0F172A] text-[9px] sm:text-[10px] font-bold uppercase tracking-wider py-0.5 px-2.5 sm:py-1 sm:px-3 rounded-full">
-                  Most Ordered
-                </span>
-              )}
- 
               <div className="space-y-4 sm:space-y-6">
                 
                 {/* Title */}
@@ -254,11 +239,7 @@ export default function Pricing({ setCurrentPage, setSelectedServiceType, showTo
               <div className="pt-6 sm:pt-8">
                 <button
                   onClick={() => handleOrderRedirect(pricingCategories[activeCategory].serviceName)}
-                  className={`w-full font-bold py-2.5 sm:py-3 px-4 rounded-xl transition-all duration-200 cursor-pointer text-xs sm:text-sm flex items-center justify-center space-x-1.5 sm:space-x-2 ${
-                    tier.popular
-                      ? 'bg-amber-500 hover:bg-amber-400 text-[#0F172A] shadow-md shadow-amber-500/25'
-                      : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700/60'
-                  }`}
+                  className="w-full font-bold py-2.5 sm:py-3 px-4 rounded-xl transition-all duration-200 cursor-pointer text-xs sm:text-sm flex items-center justify-center space-x-1.5 sm:space-x-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700/60"
                 >
                   <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   <span>Order {tier.name} Tier</span>

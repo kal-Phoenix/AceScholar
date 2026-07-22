@@ -1,27 +1,10 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import { db } from '../lib/supabase.js';
-import { safeString, requireText, MAX_LENGTHS, sanitizeText } from '../lib/validation.js';
-import { isOrderAccessibleToExpert, deriveRole } from '../lib/utils.js';
+import { safeString, sanitizeText } from '../lib/validation.js';
+import { isOrderAccessibleToExpert, getRequesterProfile } from '../lib/utils.js';
 
 const router = Router();
-
-async function getRequesterProfile(req: Request): Promise<any> {
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.slice(7);
-    if (token) {
-      const { supabase } = await import('../lib/supabase.js');
-      const { data: { user: authUser }, error } = await supabase.auth.getUser(token);
-      if (error || !authUser) return null;
-      const email = authUser.email?.toLowerCase().trim();
-      if (!email) return null;
-      const role = deriveRole(email, authUser.user_metadata?.role);
-      return { id: authUser.id, email, full_name: authUser.user_metadata?.full_name || email.split('@')[0], role, created_at: authUser.created_at };
-    }
-  }
-  return null;
-}
 
 // GET all messages (scoped by role)
 router.get('/', async (req: Request, res: Response) => {
@@ -29,33 +12,58 @@ router.get('/', async (req: Request, res: Response) => {
     const requester = await getRequesterProfile(req);
     if (!requester) return res.status(401).json({ error: 'Authentication required' });
 
-    const { data: allMessages, error: msgErr } = await db.from('messages').select('*');
-    if (msgErr) return res.status(500).json({ error: 'Failed to fetch messages' });
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit as string) || 100));
+    const offset = (page - 1) * limit;
 
-    const { data: allOrders, error: ordErr } = await db.from('orders').select('*');
-    if (ordErr) return res.status(500).json({ error: 'Failed to fetch messages' });
-
-    const messages = allMessages || [];
-    const orders = allOrders || [];
-
-    if (requester.role === 'admin') return res.json(messages);
-
-    let allowedOrderIds: Set<string>;
-    if (requester.role === 'expert') {
-      const expertOrders = orders.filter((o: any) =>
-        isOrderAccessibleToExpert(o, requester.email, requester.full_name)
-      );
-      allowedOrderIds = new Set(expertOrders.map((o: any) => o.id));
-    } else {
-      allowedOrderIds = new Set(
-        orders.filter((o: any) =>
-          typeof o.client_email === 'string' &&
-          o.client_email.toLowerCase() === requester.email.toLowerCase()
-        ).map((o: any) => o.id)
-      );
+    if (requester.role === 'admin') {
+      const { count } = await db.from('messages').select('*', { count: 'exact', head: true });
+      const { data: allMessages, error: msgErr } = await db
+        .from('messages').select('*')
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+      if (msgErr) return res.status(500).json({ error: 'Failed to fetch messages' });
+      return res.json({ data: allMessages || [], total: count || 0, page, limit });
     }
 
-    res.json(messages.filter((m: any) => allowedOrderIds.has(m.order_id)));
+    // For clients: filter orders by client_email at DB level
+    if (requester.role === 'client') {
+      const { data: clientOrders, error: ordErr } = await db
+        .from('orders').select('id').eq('client_email', requester.email);
+      if (ordErr) return res.status(500).json({ error: 'Failed to fetch orders' });
+
+      const orderIds = (clientOrders || []).map((o: any) => o.id);
+      if (orderIds.length === 0) return res.json({ data: [], total: 0, page, limit });
+
+      const { count } = await db.from('messages').select('*', { count: 'exact', head: true }).in('order_id', orderIds);
+      const { data: msgs, error: msgErr } = await db
+        .from('messages').select('*').in('order_id', orderIds)
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+      if (msgErr) return res.status(500).json({ error: 'Failed to fetch messages' });
+      return res.json({ data: msgs || [], total: count || 0, page, limit });
+    }
+
+    // For experts: fetch all orders (fuzzy matching requires JS filtering)
+    const { data: allOrders, error: ordErr } = await db.from('orders').select('*');
+    if (ordErr) return res.status(500).json({ error: 'Failed to fetch orders' });
+
+    const orders = allOrders || [];
+    const expertOrders = orders.filter((o: any) =>
+      isOrderAccessibleToExpert(o, requester.email, requester.full_name)
+    );
+    const allowedOrderIds = new Set(expertOrders.map((o: any) => o.id));
+
+    if (allowedOrderIds.size === 0) return res.json({ data: [], total: 0, page, limit });
+
+    const { count } = await db.from('messages').select('*', { count: 'exact', head: true }).in('order_id', [...allowedOrderIds]);
+    const { data: msgs, error: msgErr } = await db
+      .from('messages').select('*').in('order_id', [...allowedOrderIds])
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (msgErr) return res.status(500).json({ error: 'Failed to fetch messages' });
+
+    res.json({ data: msgs || [], total: count || 0, page, limit });
   } catch (err) {
     res.status(500).json({ error: 'Internal server error while fetching messages' });
   }
@@ -104,12 +112,13 @@ router.post('/', async (req: Request, res: Response) => {
 
     const order_id = safeString(req.body.order_id);
     const rawContent = safeString(req.body.content);
-    const sender_name = safeString(req.body.sender_name);
+    const rawSenderName = safeString(req.body.sender_name);
 
     if (!order_id) return res.status(400).json({ error: 'order_id is required' });
     if (!rawContent) return res.status(400).json({ error: 'Message content cannot be empty' });
 
-    const content = sanitizeText(rawContent);
+    const content = sanitizeText(rawContent, 10000);
+    const sender_name = sanitizeText(rawSenderName, 200) || 'Anonymous';
 
     let sender_id = req.body.sender_id ? safeString(req.body.sender_id) : null;
     if (sender_id && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sender_id)) {
@@ -120,9 +129,9 @@ router.post('/', async (req: Request, res: Response) => {
       id: req.body.id || crypto.randomUUID(),
       order_id,
       sender_id,
-      sender_name: sender_name || 'Anonymous',
+      sender_name,
       content,
-      is_admin: Boolean(req.body.is_admin),
+      is_admin: requester.role === 'admin',
       created_at: new Date().toISOString(),
     };
 

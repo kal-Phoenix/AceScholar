@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { supabase, db } from '../lib/supabase.js';
-import { InputError, MAX_LENGTHS, requireEmail, requireText, enforceBodyLimit } from '../lib/validation.js';
+import { InputError, MAX_LENGTHS, requireEmail, requireText, enforceBodyLimit, safeString } from '../lib/validation.js';
 import { deriveRole } from '../lib/utils.js';
 
 const router = Router();
@@ -142,6 +142,71 @@ router.post('/resend-verification', enforceBodyLimit(10 * 1024), async (req: Req
   } catch (err) {
     console.error('POST /api/auth/resend-verification exception:', err);
     res.status(500).json({ error: 'Internal server error during resend' });
+  }
+});
+
+// POST forgot password — sends reset email via Supabase
+router.post('/forgot-password', enforceBodyLimit(10 * 1024), async (req: Request, res: Response) => {
+  try {
+    let email: string;
+    try {
+      email = requireEmail(req.body.email);
+    } catch (e: any) {
+      if (e instanceof InputError) return res.status(400).json({ error: e.message });
+      throw e;
+    }
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${process.env.ALLOWED_ORIGIN || 'http://localhost:5173'}/reset-password`,
+    });
+
+    if (error) {
+      console.error('POST /api/auth/forgot-password error:', error.message);
+      return res.status(400).json({ error: 'Failed to send password reset email' });
+    }
+
+    res.json({ success: true, message: 'Password reset email sent. Check your inbox.' });
+  } catch (err) {
+    console.error('POST /api/auth/forgot-password exception:', err);
+    res.status(500).json({ error: 'Internal server error during password reset' });
+  }
+});
+
+// POST reset password — updates password using recovery token from email
+router.post('/reset-password', enforceBodyLimit(10 * 1024), async (req: Request, res: Response) => {
+  try {
+    const accessToken = safeString(req.body.access_token);
+    const refreshToken = safeString(req.body.refresh_token);
+    const newPassword = req.body.password;
+
+    if (!accessToken || !refreshToken) {
+      return res.status(400).json({ error: 'Reset token is required' });
+    }
+    if (!newPassword || newPassword.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+
+    // Set the session using the recovery tokens
+    const { error: sessionErr } = await supabase.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    });
+    if (sessionErr) {
+      return res.status(400).json({ error: 'Invalid or expired reset token' });
+    }
+
+    // Update the password
+    const { error: updateErr } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
+    if (updateErr) {
+      return res.status(400).json({ error: 'Failed to update password' });
+    }
+
+    res.json({ success: true, message: 'Password updated successfully. You can now sign in.' });
+  } catch (err) {
+    console.error('POST /api/auth/reset-password exception:', err);
+    res.status(500).json({ error: 'Internal server error during password reset' });
   }
 });
 

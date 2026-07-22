@@ -46,9 +46,9 @@ export const fallbackDb = {
   // PROFILES
   // ─────────────────────────────────────────────────────────────────────────
 
-  getProfiles: async (): Promise<Profile[]> => {
+  getProfiles: async (page = 1, limit = 50): Promise<{ data: Profile[]; total: number; page: number; limit: number }> => {
     try {
-      const res = await fetch('/api/profiles', { headers: getAuthHeaders() });
+      const res = await fetch(`/api/profiles?page=${page}&limit=${limit}`, { headers: getAuthHeaders() });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || `HTTP ${res.status}`);
@@ -56,7 +56,7 @@ export const fallbackDb = {
       return await res.json();
     } catch (e) {
       console.error('getProfiles failed:', e);
-      return [];
+      return { data: [], total: 0, page, limit };
     }
   },
 
@@ -76,9 +76,9 @@ export const fallbackDb = {
   // ORDERS
   // ─────────────────────────────────────────────────────────────────────────
 
-  getOrders: async (): Promise<Order[]> => {
+  getOrders: async (page = 1, limit = 50): Promise<{ data: Order[]; total: number; page: number; limit: number }> => {
     try {
-      const res = await fetch('/api/orders', { headers: getAuthHeaders() });
+      const res = await fetch(`/api/orders?page=${page}&limit=${limit}`, { headers: getAuthHeaders() });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || `HTTP ${res.status}`);
@@ -86,7 +86,7 @@ export const fallbackDb = {
       return await res.json();
     } catch (e) {
       console.error('getOrders failed:', e);
-      return [];
+      return { data: [], total: 0, page, limit };
     }
   },
 
@@ -152,9 +152,9 @@ export const fallbackDb = {
   // MESSAGES
   // ─────────────────────────────────────────────────────────────────────────
 
-  getMessages: async (): Promise<Message[]> => {
+  getMessages: async (page = 1, limit = 100): Promise<{ data: Message[]; total: number; page: number; limit: number }> => {
     try {
-      const res = await fetch('/api/messages', { headers: getAuthHeaders() });
+      const res = await fetch(`/api/messages?page=${page}&limit=${limit}`, { headers: getAuthHeaders() });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || `HTTP ${res.status}`);
@@ -162,7 +162,7 @@ export const fallbackDb = {
       return await res.json();
     } catch (e) {
       console.error('getMessages failed:', e);
-      return [];
+      return { data: [], total: 0, page, limit };
     }
   },
 
@@ -217,9 +217,9 @@ export const fallbackDb = {
   // CONTACT MESSAGES
   // ─────────────────────────────────────────────────────────────────────────
 
-  getContactMessages: async (): Promise<ContactMessage[]> => {
+  getContactMessages: async (page = 1, limit = 50): Promise<{ data: ContactMessage[]; total: number; page: number; limit: number }> => {
     try {
-      const res = await fetch('/api/contacts', { headers: getAuthHeaders() });
+      const res = await fetch(`/api/contacts?page=${page}&limit=${limit}`, { headers: getAuthHeaders() });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || `HTTP ${res.status}`);
@@ -227,7 +227,7 @@ export const fallbackDb = {
       return await res.json();
     } catch (e) {
       console.error('getContactMessages failed:', e);
-      return [];
+      return { data: [], total: 0, page, limit };
     }
   },
 
@@ -261,6 +261,42 @@ export const fallbackDb = {
       });
     } catch (e) {
       console.error('setContactMessages sync failed:', e);
+    }
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // AUTH — Password Reset
+  // ─────────────────────────────────────────────────────────────────────────
+
+  forgotPassword: async (email: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (!res.ok) return { success: false, error: data.error || 'Failed to send reset email' };
+      return { success: true };
+    } catch (e) {
+      console.error('forgotPassword failed:', e);
+      return { success: false, error: 'Network error. Please try again.' };
+    }
+  },
+
+  resetPassword: async (accessToken: string, refreshToken: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ access_token: accessToken, refresh_token: refreshToken, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) return { success: false, error: data.error || 'Failed to reset password' };
+      return { success: true };
+    } catch (e) {
+      console.error('resetPassword failed:', e);
+      return { success: false, error: 'Network error. Please try again.' };
     }
   },
 

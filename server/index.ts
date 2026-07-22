@@ -1,10 +1,12 @@
+import './lib/load-env.js';
+import { validateEnv } from './lib/validate-env.js';
+validateEnv();
 import express from 'express';
 import path from 'path';
-import fs from 'fs';
 import crypto from 'crypto';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
-import { createServer as createViteServer } from 'vite';
+
 
 // Route imports
 import authRoutes from './routes/auth.js';
@@ -15,27 +17,6 @@ import messageRoutes from './routes/messages.js';
 import contactRoutes from './routes/contacts.js';
 import uploadRoutes from './routes/upload.js';
 
-// Load .env file variables manually for Node/tsx environments
-try {
-  const envPath = path.resolve(process.cwd(), '.env');
-  if (fs.existsSync(envPath)) {
-    const envFile = fs.readFileSync(envPath, 'utf8');
-    envFile.split(/\r?\n/).forEach((line) => {
-      if (!line || line.startsWith('#') || !line.includes('=')) return;
-      const [key, ...valueParts] = line.split('=');
-      const cleanKey = key.trim();
-      let cleanVal = valueParts.join('=').trim();
-      if ((cleanVal.startsWith('"') && cleanVal.endsWith('"')) ||
-          (cleanVal.startsWith("'") && cleanVal.endsWith("'"))) {
-        cleanVal = cleanVal.slice(1, -1);
-      }
-      process.env[cleanKey] = cleanVal;
-    });
-  }
-} catch (error) {
-  console.warn('Failed to load .env file:', error);
-}
-
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
@@ -43,10 +24,10 @@ async function startServer() {
   app.set('trust proxy', 1);
 
   app.use(helmet({
-    contentSecurityPolicy: {
+    contentSecurityPolicy: process.env.NODE_ENV === 'production' ? {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
         imgSrc: ["'self'", "data:", "https:", "blob:"],
@@ -54,7 +35,7 @@ async function startServer() {
         frameSrc: ["'none'"],
         objectSrc: ["'none'"],
       },
-    },
+    } : false,
     frameguard: { action: 'deny' },
     crossOriginEmbedderPolicy: false,
   }));
@@ -62,23 +43,20 @@ async function startServer() {
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-  // CORS
+  // CORS — default-deny policy
   const allowedOrigin = process.env.ALLOWED_ORIGIN;
-  if (!allowedOrigin && process.env.NODE_ENV === 'production') {
-    console.warn('WARNING: ALLOWED_ORIGIN is not set. CORS will reject all cross-origin requests.');
-  }
   app.use((req, res, next) => {
     const origin = req.headers.origin;
-    if (allowedOrigin && origin === allowedOrigin) {
+    if (origin && origin === allowedOrigin) {
       res.header('Access-Control-Allow-Origin', origin);
-    } else if (!allowedOrigin && origin) {
+      res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    } else if (origin && !allowedOrigin && process.env.NODE_ENV !== 'production') {
       res.header('Access-Control-Allow-Origin', origin);
-    } else if (!origin) {
-      res.header('Access-Control-Allow-Origin', allowedOrigin || '*');
+      res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     }
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Credentials', 'true');
+    // No origin (server-to-server, curl, same-origin) — no CORS headers needed
     if (req.method === 'OPTIONS') return res.sendStatus(200);
     next();
   });
@@ -132,6 +110,19 @@ async function startServer() {
   app.use('/api/payments', sensitiveRateLimiter);
   app.use('/api/contacts', sensitiveRateLimiter);
 
+  const syncRateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 60,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { error: 'Too many sync requests. Please try again later.' },
+  });
+
+  app.use('/api/orders/sync', syncRateLimiter);
+  app.use('/api/profiles/sync', syncRateLimiter);
+  app.use('/api/messages/sync', syncRateLimiter);
+  app.use('/api/contacts/sync', syncRateLimiter);
+
   // ─────────────────────────────────────────────────────────────────────────
   // HEALTH CHECK (actually pings Supabase)
   // ─────────────────────────────────────────────────────────────────────────
@@ -161,29 +152,13 @@ async function startServer() {
   // ─────────────────────────────────────────────────────────────────────────
   // SYNC ENDPOINTS (bulk upsert — kept inline for simplicity)
   // ─────────────────────────────────────────────────────────────────────────
-  const { supabase, db } = await import('./lib/supabase.js');
+  const { supabase, supabaseAdmin, db } = await import('./lib/supabase.js');
   const { safeString } = await import('./lib/validation.js');
-
-  async function getRequesterFromReq(req: express.Request) {
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.slice(7);
-      if (token) {
-        const { data: { user: authUser }, error } = await supabase.auth.getUser(token);
-        if (error || !authUser) return null;
-        const { deriveRole } = await import('./lib/utils.js');
-        const email = authUser.email?.toLowerCase().trim();
-        if (!email) return null;
-        const role = deriveRole(email, authUser.user_metadata?.role);
-        return { id: authUser.id, email, role };
-      }
-    }
-    return null;
-  }
+  const { getRequesterProfile } = await import('./lib/utils.js');
 
   app.post('/api/orders/sync', async (req, res) => {
     try {
-      const requester = await getRequesterFromReq(req);
+      const requester = await getRequesterProfile(req);
       if (!requester || requester.role !== 'admin') {
         return res.status(403).json({ error: 'Unauthorized. Admin credentials required.' });
       }
@@ -242,21 +217,21 @@ async function startServer() {
 
   app.post('/api/profiles/sync', async (req, res) => {
     try {
-      const requester = await getRequesterFromReq(req);
+      const requester = await getRequesterProfile(req);
       if (!requester || requester.role !== 'admin') {
         return res.status(403).json({ error: 'Unauthorized. Admin credentials required.' });
       }
       if (!Array.isArray(req.body)) return res.status(400).json({ error: 'Body must be an array of profiles' });
 
-      const { invalidateUserCache } = await import('./routes/profiles.js');
+      const { invalidateUserCache, getCachedUsers } = await import('./routes/profiles.js');
 
+      const allUsers = await getCachedUsers();
       for (const item of req.body) {
         const email = safeString(item.email);
         if (!email) continue;
-        const { data: authUsers } = await supabase.auth.admin.listUsers();
-        const user = authUsers?.users?.find((u: any) => u.email?.toLowerCase() === email.toLowerCase());
+        const user = allUsers?.find((u: any) => u.email?.toLowerCase() === email.toLowerCase());
         if (user) {
-          await supabase.auth.admin.updateUserById(user.id, {
+          await (supabaseAdmin || supabase).auth.admin.updateUserById(user.id, {
             user_metadata: {
               ...user.user_metadata,
               full_name: safeString(item.full_name, user.user_metadata?.full_name || 'Anonymous'),
@@ -274,7 +249,7 @@ async function startServer() {
 
   app.post('/api/messages/sync', async (req, res) => {
     try {
-      const requester = await getRequesterFromReq(req);
+      const requester = await getRequesterProfile(req);
       if (!requester || requester.role !== 'admin') {
         return res.status(403).json({ error: 'Unauthorized. Admin credentials required.' });
       }
@@ -300,7 +275,7 @@ async function startServer() {
 
   app.post('/api/contacts/sync', async (req, res) => {
     try {
-      const requester = await getRequesterFromReq(req);
+      const requester = await getRequesterProfile(req);
       if (!requester || requester.role !== 'admin') {
         return res.status(403).json({ error: 'Unauthorized. Admin credentials required.' });
       }
@@ -328,6 +303,7 @@ async function startServer() {
   // VITE / STATIC SERVING
   // ─────────────────────────────────────────────────────────────────────────
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
@@ -342,6 +318,11 @@ async function startServer() {
     });
     console.log('Running in production mode serving static dist/');
   }
+
+  // 404 catch-all for unknown API routes
+  app.use('/api/*', (_req, res) => {
+    res.status(404).json({ error: 'API endpoint not found' });
+  });
 
   // Global error handler
   app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

@@ -1,4 +1,4 @@
-export type PageType = 'home' | 'services' | 'pricing' | 'portfolio' | 'about' | 'contact' | 'login' | 'signup' | 'dashboard' | 'admin' | 'order' | 'expert' | 'payment';
+export type PageType = 'home' | 'services' | 'pricing' | 'portfolio' | 'about' | 'contact' | 'login' | 'signup' | 'dashboard' | 'admin' | 'order' | 'expert' | 'forgot-password' | 'reset-password';
 
 export interface Profile {
   id: string;
@@ -59,7 +59,7 @@ export interface Order {
   preview_url?: string;
   preview_name?: string;
   payment_awaiting?: boolean;
-  payment_method_type?: 'bank_transfer' | 'crypto';
+  payment_method_type?: 'bank_transfer' | 'crypto' | 'card';
   crypto_discount_applied?: boolean;
   delivery_released?: boolean;
   // Expert submission for admin review

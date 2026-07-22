@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { PageType, Profile } from './types';
 import Navbar from './components/Navbar';
 import Home from './components/Home';
@@ -13,7 +13,8 @@ import Dashboard from './components/Dashboard';
 import Admin from './components/Admin';
 import Expert from './components/Expert';
 import Order from './components/Order';
-import PaymentPortal from './components/PaymentPortal';
+import ForgotPassword from './components/ForgotPassword';
+import ResetPassword from './components/ResetPassword';
 import Footer from './components/Footer';
 import WhatsAppButton from './components/WhatsAppButton';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -22,7 +23,6 @@ import { ShieldCheck, X } from 'lucide-react';
 export default function App() {
   const [currentPage, setCurrentPage] = useState<PageType>('home');
   const [selectedServiceType, setSelectedServiceType] = useState<string | null>(null);
-  const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [redirectPage, setRedirectPage] = useState<PageType | null>(null);
   
   // Persistence of active session
@@ -290,7 +290,7 @@ export default function App() {
       case 'about':
         return <About setCurrentPage={handleSetPage} />;
       case 'contact':
-        return <Contact detectedLocation={detectedLocation} />;
+        return <Contact />;
       case 'login':
         return (
           <Login
@@ -315,21 +315,6 @@ export default function App() {
             setCurrentPage={handleSetPage}
             showToast={showToast}
             setUser={handleSetUser}
-            onPayOrder={(orderId) => {
-              setActiveOrderId(orderId);
-              handleSetPage('payment');
-            }}
-          />
-        );
-      case 'payment':
-        return (
-          <PaymentPortal
-            orderId={activeOrderId || ''}
-            onBack={() => handleSetPage('dashboard')}
-            onPaymentSuccess={() => {
-              if (showToast) showToast('Payment verified and order initialized successfully!', 'success');
-              handleSetPage('dashboard');
-            }}
           />
         );
       case 'admin':
@@ -360,6 +345,20 @@ export default function App() {
             setRedirectPage={setRedirectPage}
           />
         );
+      case 'forgot-password':
+        return (
+          <ForgotPassword
+            setCurrentPage={handleSetPage}
+            showToast={showToast}
+          />
+        );
+      case 'reset-password':
+        return (
+          <ResetPassword
+            setCurrentPage={handleSetPage}
+            showToast={showToast}
+          />
+        );
       default:
         return <Home setCurrentPage={handleSetPage} user={user} />;
     }
@@ -367,7 +366,7 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-    <div className="min-h-screen bg-[#0F172A] flex flex-col font-sans select-none" id="app-root">
+    <div className="min-h-screen bg-[#0F172A] flex flex-col font-sans" id="app-root">
       
       {/* 1. STICKY BRANDED HEADER/NAVBAR */}
       <Navbar

@@ -5,7 +5,8 @@ import {
   InputError, MAX_LENGTHS, ALLOWED_ORDER_STATUSES, ALLOWED_PAYMENT_STATUSES, ALLOWED_PAYMENT_METHODS,
   requireText, requireEmail, optionalText, safeString, requireIdParam, enforceBodyLimit
 } from '../lib/validation.js';
-import { isOrderAccessibleToExpert } from '../lib/utils.js';
+import { isOrderAccessibleToExpert, getRequesterProfile } from '../lib/utils.js';
+import { getCachedUsers } from './profiles.js';
 
 const router = Router();
 
@@ -40,6 +41,49 @@ router.get('/', async (req: Request, res: Response) => {
     const requester = await getRequesterProfile(req);
     if (!requester) return res.status(401).json({ error: 'Authentication required' });
 
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
+    const offset = (page - 1) * limit;
+
+    // Admin gets all orders
+    if (requester.role === 'admin') {
+      const { count } = await db
+        .from('orders')
+        .select('*', { count: 'exact', head: true });
+
+      const { data, error } = await db
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+      if (error) {
+        console.error('GET /api/orders error:', error.message);
+        return res.status(500).json({ error: 'Failed to fetch orders' });
+      }
+      return res.json({ data: data || [], total: count || 0, page, limit });
+    }
+
+    // Client: filter by client_email at DB level
+    if (requester.role === 'client') {
+      const { count } = await db
+        .from('orders')
+        .select('*', { count: 'exact', head: true })
+        .eq('client_email', requester.email);
+
+      const { data, error } = await db
+        .from('orders')
+        .select('*')
+        .eq('client_email', requester.email)
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+      if (error) {
+        console.error('GET /api/orders error:', error.message);
+        return res.status(500).json({ error: 'Failed to fetch orders' });
+      }
+      return res.json({ data: data || [], total: count || 0, page, limit });
+    }
+
+    // Expert: fetch all and filter in JS (fuzzy matching)
     const { data, error } = await db
       .from('orders')
       .select('*')
@@ -50,23 +94,13 @@ router.get('/', async (req: Request, res: Response) => {
       return res.status(500).json({ error: 'Failed to fetch orders' });
     }
 
-    const orders = data || [];
-
-    if (requester.role === 'admin') {
-      return res.json(orders);
-    }
-
-    if (requester.role === 'expert') {
-      return res.json(orders.filter((o: any) =>
-        isOrderAccessibleToExpert(o, requester.email, requester.full_name)
-      ));
-    }
-
-    // Client — only their own orders
-    return res.json(orders.filter((o: any) =>
-      typeof o.client_email === 'string' &&
-      o.client_email.toLowerCase() === requester.email.toLowerCase()
-    ));
+    const allOrders = data || [];
+    const filtered = allOrders.filter((o: any) =>
+      isOrderAccessibleToExpert(o, requester.email, requester.full_name)
+    );
+    const total = filtered.length;
+    const paginated = filtered.slice(offset, offset + limit);
+    return res.json({ data: paginated, total, page, limit });
   } catch (err) {
     console.error('GET /api/orders exception:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -114,9 +148,8 @@ router.post('/', enforceBodyLimit(5 * 1024 * 1024), async (req: Request, res: Re
       throw e;
     }
 
-    const { supabase } = await import('../lib/supabase.js');
-    const { data: authUsers } = await supabase.auth.admin.listUsers();
-    const clientAuthUser = authUsers?.users?.find((u: any) => u.email?.toLowerCase() === client_email.toLowerCase());
+    const authUsers = await getCachedUsers();
+    const clientAuthUser = authUsers?.find((u: any) => u.email?.toLowerCase() === client_email.toLowerCase());
     const client_id = clientAuthUser?.id || null;
 
     const orderId = optionalText(req.body.id, MAX_LENGTHS.id).replace(/[^a-zA-Z0-9_\-]/g, '') || 'ord-' + crypto.randomUUID().replace(/-/g, '').substring(0, 12);
@@ -252,6 +285,108 @@ router.put('/:orderId', async (req: Request, res: Response) => {
   }
 });
 
+// POST apply to order (expert submits application — admin must approve)
+router.post('/:orderId/apply', async (req: Request, res: Response) => {
+  try {
+    const requester = await getRequesterProfile(req);
+    if (!requester || requester.role !== 'expert') {
+      return res.status(403).json({ error: 'Only experts can apply to orders' });
+    }
+
+    let orderId: string;
+    try { orderId = requireIdParam(req.params.orderId, 'Order ID'); }
+    catch (e: any) { if (e instanceof InputError) return res.status(400).json({ error: e.message }); throw e; }
+
+    const expert_email = safeString(req.body.expert_email);
+    const expert_name = safeString(req.body.expert_name);
+    if (!expert_email || !expert_name) {
+      return res.status(400).json({ error: 'expert_email and expert_name are required' });
+    }
+
+    const { data: order, error: fetchErr } = await db
+      .from('orders').select('*').eq('id', orderId).maybeSingle();
+    if (fetchErr) return res.status(500).json({ error: 'Failed to fetch order' });
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+
+    // Check if already assigned
+    if (order.assigned_to && order.assigned_to.trim() && order.assigned_to !== 'Unallocated') {
+      return res.status(409).json({ error: 'This order is already assigned to another expert' });
+    }
+
+    // Check if already applied
+    const applicants = Array.isArray(order.applicants) ? order.applicants : [];
+    const alreadyApplied = applicants.some((a: any) =>
+      a.expert_email?.toLowerCase() === expert_email.toLowerCase()
+    );
+    if (alreadyApplied) {
+      return res.status(409).json({ error: 'You have already applied to this order' });
+    }
+
+    // Add application
+    const newApplicant = {
+      expert_email,
+      expert_name,
+      applied_at: new Date().toISOString(),
+      status: 'pending',
+    };
+    const updatedApplicants = [...applicants, newApplicant];
+
+    const { error: updateErr } = await db
+      .from('orders').update({ applicants: updatedApplicants }).eq('id', orderId);
+    if (updateErr) return res.status(500).json({ error: 'Failed to submit application' });
+
+    res.json({ success: true, applicants: updatedApplicants });
+  } catch (err) {
+    console.error('POST /api/orders/:orderId/apply exception:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST approve expert application (admin only)
+router.post('/:orderId/approve-expert', async (req: Request, res: Response) => {
+  try {
+    const requester = await getRequesterProfile(req);
+    if (!requester || requester.role !== 'admin') {
+      return res.status(403).json({ error: 'Unauthorized. Admin credentials required.' });
+    }
+
+    let orderId: string;
+    try { orderId = requireIdParam(req.params.orderId, 'Order ID'); }
+    catch (e: any) { if (e instanceof InputError) return res.status(400).json({ error: e.message }); throw e; }
+
+    const { expert_email, expert_name } = req.body;
+    if (!expert_email || !expert_name) {
+      return res.status(400).json({ error: 'expert_email and expert_name are required' });
+    }
+
+    const { data: order, error: fetchErr } = await db
+      .from('orders').select('*').eq('id', orderId).maybeSingle();
+    if (fetchErr) return res.status(500).json({ error: 'Failed to fetch order' });
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+
+    // Update applicants — mark this one as approved, others as rejected
+    const applicants = Array.isArray(order.applicants) ? order.applicants : [];
+    const updatedApplicants = applicants.map((a: any) => ({
+      ...a,
+      status: a.expert_email?.toLowerCase() === expert_email.toLowerCase() ? 'approved' : 'rejected',
+    }));
+
+    const { error: updateErr } = await db
+      .from('orders').update({
+        applicants: updatedApplicants,
+        assigned_to: expert_name,
+        expert_accepted: true,
+        status: 'in_progress',
+      }).eq('id', orderId);
+    if (updateErr) return res.status(500).json({ error: 'Failed to approve expert' });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('POST /api/orders/:orderId/approve-expert exception:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // DELETE order (admin only)
 router.delete('/:orderId', async (req: Request, res: Response) => {
   try {
@@ -272,27 +407,5 @@ router.delete('/:orderId', async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Internal server error while deleting order' });
   }
 });
-
-// ─────────────────────────────────────────────────────────────────────────
-// AUTH HELPER
-// ─────────────────────────────────────────────────────────────────────────
-
-async function getRequesterProfile(req: Request): Promise<any> {
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.slice(7);
-    if (token) {
-      const { supabase } = await import('../lib/supabase.js');
-      const { data: { user: authUser }, error } = await supabase.auth.getUser(token);
-      if (error || !authUser) return null;
-      const { deriveRole } = await import('../lib/utils.js');
-      const email = authUser.email?.toLowerCase().trim();
-      if (!email) return null;
-      const role = deriveRole(email, authUser.user_metadata?.role);
-      return { id: authUser.id, email, full_name: authUser.user_metadata?.full_name || email.split('@')[0], role, created_at: authUser.created_at };
-    }
-  }
-  return null;
-}
 
 export default router;

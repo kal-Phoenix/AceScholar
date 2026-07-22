@@ -1,4 +1,4 @@
-import { ShieldCheck, Zap, Award, RotateCcw, Target, Shield, CalendarDays, HelpCircle } from 'lucide-react';
+import { ShieldCheck, Zap, Award, RotateCcw, Target, Shield, CalendarDays } from 'lucide-react';
 import { PageType } from '../types';
 
 interface AboutProps {
