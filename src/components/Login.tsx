@@ -129,7 +129,7 @@ export default function Login({ setCurrentPage, setUser, showToast, redirectPage
   };
 
   return (
-    <div className="bg-[#0F172A] font-sans text-slate-100 min-h-[80vh] flex items-center justify-center px-4 py-16" id="login-page-container">
+    <div className="bg-[#0F172A] font-sans text-slate-100 min-h-[60vh] flex items-center justify-center px-4 py-8" id="login-page-container">
       
       <div className="max-w-md w-full bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl space-y-6 relative overflow-hidden animate-fade-in-up">
         

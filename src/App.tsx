@@ -398,7 +398,7 @@ export default function App() {
       )}
 
       {/* 2. MAIN SCROLLABLE CONTENT BODY */}
-      <main className={`${isFullscreenPage ? '' : 'flex-grow'} animate-fade-in`} key={currentPage}>
+      <main className={`${isFullscreenPage ? 'flex-1' : 'flex-1'} animate-fade-in`} key={currentPage}>
         {renderActivePage()}
       </main>
 

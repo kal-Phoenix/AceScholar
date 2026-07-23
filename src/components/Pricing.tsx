@@ -163,7 +163,7 @@ export default function Pricing({ setCurrentPage, setSelectedServiceType, showTo
     <div className="bg-[#0F172A] font-sans text-slate-100" id="pricing-page-container">
       
       {/* 1. PAGE HEADER */}
-      <header className="relative overflow-hidden bg-gradient-to-b from-[#0F172A] via-[#1a1f3a] to-[#0F172A] py-12 sm:py-18 md:py-24 px-4 text-center border-b border-slate-800/40">
+      <header className="relative overflow-hidden bg-gradient-to-b from-[#0F172A] via-[#1a1f3a] to-[#0F172A] py-8 sm:py-12 md:py-16 px-4 text-center border-b border-slate-800/40">
         <div className="absolute inset-0 opacity-[0.04] pointer-events-none bg-[radial-gradient(#f59e0b_1px,transparent_1px)] [background-size:20px_20px]"></div>
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-amber-500/6 rounded-full filter blur-[120px] pointer-events-none"></div>
         <div className="relative max-w-4xl mx-auto space-y-4 sm:space-y-5">

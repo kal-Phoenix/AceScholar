@@ -539,7 +539,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
   const revisionCount = orders.filter(o => o.status === 'revision_requested').length;
 
   return (
-    <div className="bg-[#0F172A] text-slate-100 min-h-screen font-sans" id="dashboard-root">
+    <div className="bg-[#0F172A] text-slate-100 font-sans" id="dashboard-root">
       
       {/* 1. HEADER HERO BANNER */}
       <header className="bg-gradient-to-b from-[#0F172A] to-[#1E293B] border-b border-slate-800 py-6 sm:py-10 px-4 sm:px-6 lg:px-8">

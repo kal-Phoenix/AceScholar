@@ -83,7 +83,7 @@ export default function Signup({ setCurrentPage, showToast }: SignupProps) {
   }
 
   return (
-    <div className="bg-[#0F172A] font-sans text-slate-100 min-h-[80vh] flex items-center justify-center px-4 py-16" id="signup-page-container">
+    <div className="bg-[#0F172A] font-sans text-slate-100 min-h-[60vh] flex items-center justify-center px-4 py-8" id="signup-page-container">
       
       <div className="max-w-md w-full bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl space-y-6 relative overflow-hidden animate-fade-in-up">
         
@@ -312,7 +312,7 @@ function EmailVerificationScreen({
   };
 
   return (
-    <div className="bg-[#0F172A] font-sans text-slate-100 min-h-[80vh] flex items-center justify-center px-4 py-16" id="email-verification-screen">
+    <div className="bg-[#0F172A] font-sans text-slate-100 min-h-[60vh] flex items-center justify-center px-4 py-8" id="email-verification-screen">
       <div className="max-w-md w-full bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl space-y-6 relative overflow-hidden">
 
         {/* Glow accents */}

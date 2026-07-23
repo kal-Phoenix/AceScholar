@@ -524,7 +524,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
   const unreadContactMessages = contactMessages.filter(m => !m.is_read).length;
 
   return (
-    <div className="bg-[#0F172A] text-slate-100 min-h-screen font-sans" id="admin-root">
+    <div className="bg-[#0F172A] text-slate-100 font-sans" id="admin-root">
       
       {/* 1. ADMIN PANEL HEADER */}
       <header className="bg-gradient-to-b from-[#0F172A] to-[#1E293B] border-b border-slate-800 py-6 sm:py-8 px-4 sm:px-6 lg:px-8">

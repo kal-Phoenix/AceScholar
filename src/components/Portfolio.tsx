@@ -60,10 +60,10 @@ export default function Portfolio({ setCurrentPage }: PortfolioProps) {
   };
 
   return (
-    <div className="bg-[#0F172A] font-sans text-slate-100 min-h-screen" id="portfolio-page-container">
+    <div className="bg-[#0F172A] font-sans text-slate-100" id="portfolio-page-container">
 
       {/* 1. PAGE HEADER */}
-      <header className="relative bg-gradient-to-b from-[#0F172A] to-[#1E293B] py-10 sm:py-16 md:py-20 px-4 text-center border-b border-slate-800">
+      <header className="relative bg-gradient-to-b from-[#0F172A] to-[#1E293B] py-6 sm:py-10 md:py-14 px-4 text-center border-b border-slate-800">
         <div className="absolute inset-0 opacity-5 pointer-events-none bg-[radial-gradient(#f59e0b_1px,transparent_1px)] [background-size:16px_16px]"></div>
         <div className="max-w-4xl mx-auto space-y-3 sm:space-y-4">
           <span className="text-amber-500 text-[10px] sm:text-xs font-bold tracking-widest uppercase">Our Capabilities</span>
