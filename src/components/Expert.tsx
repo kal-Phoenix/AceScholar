@@ -6,7 +6,7 @@ import {
   Coins, DollarSign, TrendingUp
 } from 'lucide-react';
 import { PageType, Profile, Order as AcademicOrder, Message, Payment } from '../types';
-import { fallbackDb } from '../lib/supabase';
+import { fallbackDb, getAuthHeaders } from '../lib/supabase';
 
 interface ExpertProps {
   user: Profile | null;
@@ -185,7 +185,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
       // Add expert as applicant — admin must approve before assignment
       const res = await fetch(`/api/orders/${orderId}/apply`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${JSON.parse(localStorage.getItem('ace_scholar_current_user') || '{}').access_token}` },
+        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
         body: JSON.stringify({ expert_email: user.email, expert_name: user.full_name }),
       });
       if (!res.ok) {
@@ -229,9 +229,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
 
   const fetchMessagesForOrder = async (orderId: string) => {
     try {
-      const result = await fallbackDb.getMessages(1, 500);
-      const allMessages = result.data;
-      const thread = allMessages.filter(m => m.order_id === orderId);
+      const thread = await fallbackDb.getMessagesByOrder(orderId);
       thread.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
       setMessages(thread);
     } catch (e) {
@@ -383,7 +381,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
           </div>
           <div className="flex items-center gap-3">
             <span className="text-xs text-slate-400">Academic Desk Link:</span>
-            <span className="text-xs font-mono bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-850 text-slate-300">
+            <span className="text-xs font-mono bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800 text-slate-300">
               {user.email}
             </span>
           </div>
@@ -431,7 +429,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
         </div>
 
         {/* Tab switcher */}
-        <div className="flex border-b border-slate-850 mb-6 gap-2">
+        <div className="flex border-b border-slate-800 mb-6 gap-2">
           <button
             onClick={() => {
               setActiveTab('assigned');
@@ -474,7 +472,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
         </div>
 
         {((activeTab === 'assigned' ? assignedOrders : availableOrders).length === 0) ? (
-          <div className="bg-slate-900 border border-slate-850 rounded-2xl p-12 text-center max-w-2xl mx-auto space-y-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center max-w-2xl mx-auto space-y-4">
             <GraduationCap className="h-10 w-10 text-slate-500 mx-auto" />
             <h2 className="text-lg font-bold text-white">
               {activeTab === 'assigned' ? 'No active assignments allocated yet' : 'No available student orders'}
@@ -503,7 +501,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
                 </span>
                 <button 
                   onClick={fetchExpertOrders} 
-                  className="p-1.5 bg-slate-950 hover:bg-slate-900 border border-slate-850 hover:border-slate-750 text-slate-400 hover:text-white rounded transition-colors cursor-pointer shrink-0"
+                  className="p-1.5 bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-slate-750 text-slate-400 hover:text-white rounded transition-colors cursor-pointer shrink-0"
                   title="Synchronize Database"
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
@@ -536,8 +534,8 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
                       }}
                       className={`rounded-xl border text-left cursor-pointer transition-all overflow-hidden ${
                         isSelected 
-                          ? 'bg-slate-850 border-amber-500/80 shadow-lg shadow-amber-500/[0.03]' 
-                          : 'bg-slate-900/80 border-slate-850 hover:border-slate-800'
+                          ? 'bg-slate-800 border-amber-500/80 shadow-lg shadow-amber-500/[0.03]' 
+                          : 'bg-slate-900/80 border-slate-800 hover:border-slate-800'
                       }`}
                     >
                       {/* Urgency strip */}
@@ -596,10 +594,10 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
               <div className="lg:col-span-7 space-y-6">
                 
                 {/* Core Specification Tab */}
-                <div className="bg-slate-900 border border-slate-850 p-5 sm:p-6 rounded-2xl space-y-5 shadow-xl">
+                <div className="bg-slate-900 border border-slate-800 p-5 sm:p-6 rounded-2xl space-y-5 shadow-xl">
                   
                   {/* Detailed Title */}
-                  <div className="flex flex-col sm:flex-row justify-between items-start gap-3 border-b border-slate-850 pb-4">
+                  <div className="flex flex-col sm:flex-row justify-between items-start gap-3 border-b border-slate-800 pb-4">
                     <div>
                       <span className="text-[10px] uppercase font-bold text-amber-400 tracking-wider">
                         {activeTab === 'assigned' ? 'Active Workspace' : 'Student Request Details'}
@@ -618,12 +616,12 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
 
                   {/* Inner Workbench Tab Menu (For Assigned Projects only) */}
                   {activeTab === 'assigned' && selectedOrder.expert_accepted !== false && (
-                    <div className="flex bg-slate-950 p-1 rounded-lg gap-1 border border-slate-850 shrink-0">
+                    <div className="flex bg-slate-950 p-1 rounded-lg gap-1 border border-slate-800 shrink-0">
                       <button
                         onClick={() => setWorkbenchTab('details')}
                         className={`flex-1 text-center py-2 rounded-md text-xs font-bold transition-all cursor-pointer ${
                           workbenchTab === 'details'
-                            ? 'bg-slate-850 text-white shadow'
+                            ? 'bg-slate-800 text-white shadow'
                             : 'text-slate-400 hover:text-white hover:bg-slate-900/50'
                         }`}
                       >
@@ -633,7 +631,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
                         onClick={() => setWorkbenchTab('chat')}
                         className={`flex-1 text-center py-2 rounded-md text-xs font-bold transition-all cursor-pointer flex justify-center items-center gap-1.5 ${
                           workbenchTab === 'chat'
-                            ? 'bg-slate-850 text-white shadow'
+                            ? 'bg-slate-800 text-white shadow'
                             : 'text-slate-400 hover:text-white hover:bg-slate-900/50'
                         }`}
                       >
@@ -653,7 +651,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
                     <div className="space-y-4">
                       <div>
                         <h4 className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Project Specification Requirements</h4>
-                        <p className="text-xs text-slate-200 bg-slate-950 border border-slate-850 p-3.5 rounded-lg leading-relaxed mt-1.5 whitespace-pre-wrap font-light">
+                        <p className="text-xs text-slate-200 bg-slate-950 border border-slate-800 p-3.5 rounded-lg leading-relaxed mt-1.5 whitespace-pre-wrap font-light">
                           {selectedOrder.description}
                         </p>
                       </div>
@@ -669,7 +667,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
 
                       {/* Associated client uploaded files */}
                       {selectedOrder.file_name && (
-                        <div className="bg-slate-950 border border-slate-850 rounded-lg p-3 flex items-center justify-between text-xs">
+                        <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 flex items-center justify-between text-xs">
                           <div className="flex items-center space-x-2">
                             <FileText className="h-4 w-4 text-amber-500 shrink-0" />
                             <span className="text-slate-300 truncate max-w-xs">{selectedOrder.file_name}</span>
@@ -689,7 +687,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
                     </div>
                   ) : (
                     /* Embedded Chat view inside Workbench Tab */
-                    <div className="flex flex-col h-[340px] bg-slate-950 border border-slate-850 rounded-xl overflow-hidden">
+                    <div className="flex flex-col h-[340px] bg-slate-950 border border-slate-800 rounded-xl overflow-hidden">
                       
                       {/* Message ledger */}
                       <div className="flex-grow overflow-y-auto p-4 space-y-3">
@@ -734,7 +732,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
                       </div>
 
                       {/* Send Form */}
-                      <form onSubmit={handleSendMessage} className="p-2 border-t border-slate-850 bg-slate-950 flex items-center space-x-2 shrink-0">
+                      <form onSubmit={handleSendMessage} className="p-2 border-t border-slate-800 bg-slate-950 flex items-center space-x-2 shrink-0">
                         <input
                           type="text"
                           value={typedMessage}
@@ -757,7 +755,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
                   {/* TAB 1 Logic: Expert Workbench Status Update Panel */}
                   {activeTab === 'assigned' && (
                     selectedOrder.expert_accepted === false ? (
-                      <div className="border-t border-slate-850 pt-5 space-y-4">
+                      <div className="border-t border-slate-800 pt-5 space-y-4">
                         <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4 text-center space-y-3">
                           <AlertCircle className="h-6 w-6 text-amber-500 mx-auto" />
                           <div className="space-y-1">
@@ -786,10 +784,10 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
                       </div>
                     ) : (
                       /* ACTIVE WORKBENCH SIMPLIFIED QUICK ACTION FOOTER */
-                      <div className="border-t border-slate-850 pt-5 space-y-4">
+                      <div className="border-t border-slate-800 pt-5 space-y-4">
                         
                         {/* Status timeline progress */}
-                        <div className="bg-slate-950 border border-slate-850 p-3 rounded-xl flex items-center justify-between text-[11px] text-slate-400">
+                        <div className="bg-slate-950 border border-slate-800 p-3 rounded-xl flex items-center justify-between text-[11px] text-slate-400">
                           <div className="flex items-center space-x-1.5">
                             <span className="font-semibold text-slate-500">Milestone Stage:</span>
                             {selectedOrder.status === 'delivered' ? (
@@ -821,8 +819,8 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
 
                         {/* Collapsible Advanced Form */}
                         {showAdvanced && (
-                          <div className="bg-slate-950/50 border border-slate-850 rounded-xl p-4 space-y-3.5 animate-none">
-                            <h4 className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider border-b border-slate-850 pb-1.5">Manual Override Panel</h4>
+                          <div className="bg-slate-950/50 border border-slate-800 rounded-xl p-4 space-y-3.5 animate-none">
+                            <h4 className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider border-b border-slate-800 pb-1.5">Manual Override Panel</h4>
                             
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                               <div className="space-y-1">
@@ -875,7 +873,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
                         )}
 
                         {/* HIGH-IMPACT SIMPLIFIED QUICK ACTIONS (THE CORE OF REDUCED COMPLEXITY) */}
-                        <div className="bg-slate-950/40 border border-slate-850 p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div className="bg-slate-950/40 border border-slate-800 p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4">
                           <div className="space-y-1 text-center sm:text-left">
                             <h4 className="text-xs font-bold text-white uppercase tracking-wider">
                               {selectedOrder.status === 'delivered' ? 'Project Completed' : 'Task Dispatch Desk'}
@@ -910,7 +908,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
                                 <button
                                   type="button"
                                   onClick={() => fileInputRef.current?.click()}
-                                  className="w-full sm:w-auto bg-slate-850 hover:bg-slate-800 text-slate-300 font-semibold px-5 py-3 rounded-xl text-xs flex items-center justify-center space-x-1.5 cursor-pointer border border-slate-750"
+                                  className="w-full sm:w-auto bg-slate-800 hover:bg-slate-800 text-slate-300 font-semibold px-5 py-3 rounded-xl text-xs flex items-center justify-center space-x-1.5 cursor-pointer border border-slate-750"
                                 >
                                   <Paperclip className="h-4 w-4 text-amber-500" />
                                   <span>Select Completed Solution File</span>
@@ -1007,7 +1005,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
 
                   {/* TAB 2 Logic: Instant Claim Form */}
                   {activeTab === 'available' && (
-                    <div className="border-t border-slate-850 pt-5 space-y-4">
+                    <div className="border-t border-slate-800 pt-5 space-y-4">
                       <div className="bg-amber-500/5 border border-amber-500/10 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
                         <div className="space-y-1 text-center sm:text-left">
                           <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5 justify-center sm:justify-start">
@@ -1050,7 +1048,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
 
         {/* EARNINGS TAB */}
         {activeTab === 'earnings' && (
-          <div className="bg-slate-900 border border-slate-850 rounded-2xl p-5 sm:p-8 space-y-6">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-6">
 
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-800 pb-4 gap-4">
               <div className="space-y-1">
@@ -1062,7 +1060,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
               </div>
               <button
                 onClick={fetchExpertOrders}
-                className="p-2 bg-slate-950 hover:bg-slate-850 border border-slate-850 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                className="p-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
               >
                 <RefreshCw className="h-4 w-4" />
               </button>
@@ -1070,7 +1068,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
 
             {/* Stats */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-slate-950 border border-slate-850 p-4 rounded-xl space-y-1">
+              <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-1">
                 <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                   <span>Total Earnings (USD)</span>
                   <DollarSign className="h-3.5 w-3.5 text-amber-500" />
@@ -1082,7 +1080,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
                   {myPayments.filter(p => p.currency !== 'USD').reduce((s, p) => s + p.expert_amount, 0).toLocaleString()} ETB
                 </p>
               </div>
-              <div className="bg-slate-950 border border-slate-850 p-4 rounded-xl space-y-1">
+              <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-1">
                 <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                   <span>Settled Payments</span>
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
@@ -1090,7 +1088,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
                 <p className="text-lg font-extrabold text-emerald-400">{myPayments.length}</p>
                 <p className="text-xs text-slate-500 font-light">Transactions recorded</p>
               </div>
-              <div className="bg-slate-950 border border-slate-850 p-4 rounded-xl space-y-1">
+              <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-1">
                 <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                   <span>Completed Projects</span>
                   <TrendingUp className="h-3.5 w-3.5 text-sky-400" />
@@ -1104,15 +1102,15 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
 
             {/* Earnings Table */}
             {myPayments.length === 0 ? (
-              <div className="text-center py-16 bg-slate-950/20 border border-slate-850 rounded-xl text-slate-500 text-xs font-light space-y-3">
+              <div className="text-center py-16 bg-slate-950/20 border border-slate-800 rounded-xl text-slate-500 text-xs font-light space-y-3">
                 <Coins className="h-10 w-10 mx-auto text-slate-700" />
                 <p>No settled payments yet. Complete and deliver assignments to see earnings here.</p>
               </div>
             ) : (
-              <div className="overflow-x-auto border border-slate-850 rounded-xl">
+              <div className="overflow-x-auto border border-slate-800 rounded-xl">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
-                    <tr className="bg-slate-950 text-slate-400 border-b border-slate-850 font-mono font-bold uppercase tracking-wider">
+                    <tr className="bg-slate-950 text-slate-400 border-b border-slate-800 font-mono font-bold uppercase tracking-wider">
                       <th className="p-3">Order ID</th>
                       <th className="p-3">Payment ID</th>
                       <th className="p-3">Gross Amount</th>
@@ -1121,7 +1119,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
                       <th className="p-3">Date</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-850/60 bg-slate-950/20">
+                  <tbody className="divide-y divide-slate-800/60 bg-slate-950/20">
                     {myPayments.map((p) => (
                       <tr key={p.id} className="hover:bg-slate-900/40 transition-colors">
                         <td className="p-3 font-mono text-amber-500 font-bold">{p.order_id}</td>

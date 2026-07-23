@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import { db } from '../lib/supabase.js';
 import {
   InputError, MAX_LENGTHS, ALLOWED_ORDER_STATUSES, ALLOWED_PAYMENT_STATUSES, ALLOWED_PAYMENT_METHODS,
-  requireText, requireEmail, optionalText, safeString, requireIdParam, enforceBodyLimit
+  requireText, requireEmail, optionalText, safeString, requireIdParam, enforceBodyLimit, sanitizeText
 } from '../lib/validation.js';
 import { isOrderAccessibleToExpert, getRequesterProfile } from '../lib/utils.js';
 import { getCachedUsers } from './profiles.js';
@@ -247,6 +247,13 @@ router.put('/:orderId', async (req: Request, res: Response) => {
 
     const dbRecord = buildDbRecord(req.body);
 
+    // Sanitize all string values to prevent oversized/malicious input
+    for (const key of Object.keys(dbRecord)) {
+      if (typeof dbRecord[key] === 'string') {
+        dbRecord[key] = sanitizeText(dbRecord[key], MAX_LENGTHS[key as keyof typeof MAX_LENGTHS] || MAX_LENGTHS.general);
+      }
+    }
+
     if (requester.role === 'client') {
       const CLIENT_ALLOWED_FIELDS = [
         'description', 'special_instructions', 'budget_range', 'deadline',
@@ -260,7 +267,7 @@ router.put('/:orderId', async (req: Request, res: Response) => {
     } else if (requester.role === 'expert') {
       const EXPERT_ALLOWED_FIELDS = [
         'status', 'assigned_to', 'expert_accepted', 'delivery_url', 'delivery_name',
-        'expert_submission_url', 'expert_submission_name', 'description',
+        'expert_submission_url', 'expert_submission_name', 'description', 'internal_notes',
       ];
       for (const key of Object.keys(dbRecord)) {
         if (!EXPERT_ALLOWED_FIELDS.includes(key)) {

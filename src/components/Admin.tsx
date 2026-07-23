@@ -68,7 +68,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
       const res = await fetch('/api/profiles/approve-expert', {
         method: 'POST',
         headers: {
-          ...getAuthHeaders(),
+          ...(await getAuthHeaders()),
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ id: app.user_id, email: app.email })
@@ -90,7 +90,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
       const res = await fetch('/api/profiles/reject-expert', {
         method: 'POST',
         headers: {
-          ...getAuthHeaders(),
+          ...(await getAuthHeaders()),
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ id: app.user_id, email: app.email })
@@ -171,9 +171,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
 
   const fetchMessagesForOrder = async (orderId: string) => {
     try {
-      const result = await fallbackDb.getMessages(1, 500);
-      const allMessages = result.data;
-      const thread = allMessages.filter(m => m.order_id === orderId);
+      const thread = await fallbackDb.getMessagesByOrder(orderId);
       thread.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
       setMessages(thread);
     } catch (e) {
@@ -257,7 +255,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
       // Update order status and delivery details via backend
       const res = await fetch(`/api/orders/${selectedOrder.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
         body: JSON.stringify({
           status: 'delivered',
           delivery_name: deliveryFileName,
@@ -319,7 +317,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
       }
       const res = await fetch(`/api/orders/${selectedOrder.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
         body: JSON.stringify(updates),
       });
 
@@ -403,7 +401,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
       // 1. Set payment_awaiting to true (requests payment)
       const res = await fetch(`/api/orders/${selectedOrder.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
         body: JSON.stringify({ payment_awaiting: true }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -430,14 +428,16 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
 
   const handleToggleMessageRead = async (messageId: string) => {
     try {
-      const updatedMessages = contactMessages.map(m => {
-        if (m.id === messageId) {
-          return { ...m, is_read: !m.is_read };
-        }
-        return m;
+      const msg = contactMessages.find(m => m.id === messageId);
+      if (!msg) return;
+      const res = await fetch(`/api/contacts/${messageId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
+        body: JSON.stringify({ is_read: !msg.is_read }),
       });
-      await fallbackDb.setContactMessages(updatedMessages);
-      setContactMessages(updatedMessages);
+      if (!res.ok) throw new Error('Failed to update');
+      const updated = contactMessages.map(m => m.id === messageId ? { ...m, is_read: !m.is_read } : m);
+      setContactMessages(updated);
       if (showToast) showToast('Message status updated', 'success');
     } catch (e) {
       console.error(e);
@@ -447,9 +447,12 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
   const handleDeleteContactMessage = async (messageId: string) => {
     if (!window.confirm('Delete this contact message permanently?')) return;
     try {
-      const filtered = contactMessages.filter(m => m.id !== messageId);
-      await fallbackDb.setContactMessages(filtered);
-      setContactMessages(filtered);
+      const res = await fetch(`/api/contacts/${messageId}`, {
+        method: 'DELETE',
+        headers: await getAuthHeaders(),
+      });
+      if (!res.ok) throw new Error('Failed to delete');
+      setContactMessages(prev => prev.filter(m => m.id !== messageId));
       if (showToast) showToast('Contact message deleted', 'success');
     } catch (e) {
       console.error(e);
@@ -539,7 +542,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
             </p>
           </div>
 
-          <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-850 shrink-0 gap-1">
+          <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0 gap-1">
             <button
               onClick={() => setActiveTab('orders')}
               className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs font-bold transition-all ${
@@ -598,7 +601,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
             </div>
           </div>
           <div className="bg-slate-900 border border-slate-800/80 p-4 sm:p-6 rounded-xl flex items-center space-x-4">
-            <div className="p-3 bg-slate-950 text-amber-500 rounded-lg border border-slate-850">
+            <div className="p-3 bg-slate-950 text-amber-500 rounded-lg border border-slate-800">
               <Clock className="h-5 w-5 sm:h-6 sm:w-6" />
             </div>
             <div>
@@ -607,7 +610,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
             </div>
           </div>
           <div className="bg-slate-900 border border-slate-800/80 p-4 sm:p-6 rounded-xl flex items-center space-x-4">
-            <div className="p-3 bg-slate-950 text-emerald-500 rounded-lg border border-slate-850">
+            <div className="p-3 bg-slate-950 text-emerald-500 rounded-lg border border-slate-800">
               <ShieldCheck className="h-5 w-5 sm:h-6 sm:w-6" />
             </div>
             <div>
@@ -616,7 +619,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
             </div>
           </div>
           <div className="bg-slate-900 border border-slate-800/80 p-4 sm:p-6 rounded-xl flex items-center space-x-4">
-            <div className="p-3 bg-slate-950 text-blue-500 rounded-lg border border-slate-850">
+            <div className="p-3 bg-slate-950 text-blue-500 rounded-lg border border-slate-800">
               <Mail className="h-5 w-5 sm:h-6 sm:w-6" />
             </div>
             <div>
@@ -660,8 +663,8 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                     <div
                       key={o.id}
                       onClick={() => setSelectedOrder(o)}
-                      className={`bg-slate-900 hover:bg-slate-850 p-4 rounded-xl border transition-all cursor-pointer select-none space-y-2.5 ${
-                        selectedOrder?.id === o.id ? 'border-amber-500' : 'border-slate-850'
+                      className={`bg-slate-900 hover:bg-slate-800 p-4 rounded-xl border transition-all cursor-pointer select-none space-y-2.5 ${
+                        selectedOrder?.id === o.id ? 'border-amber-500' : 'border-slate-800'
                       }`}
                     >
                       <div className="flex items-center justify-between">
@@ -706,7 +709,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                      {/* Payment Verification Block — only shows when student has submitted proof */}
                      {selectedOrder.payment_screenshot && (
                       <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-4">
-                        <div className="flex items-center justify-between border-b border-slate-850 pb-2">
+                        <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                           <h4 className="text-xs font-bold text-amber-500 uppercase tracking-wider">Payment Proof Verification</h4>
                           <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
                             selectedOrder.payment_status === 'approved'
@@ -783,7 +786,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                     {/* EXPERT APPLICATIONS RECEIVED */}
                     {selectedOrder.applicants && selectedOrder.applicants.length > 0 && (
                       <div className="bg-slate-950 border border-amber-500/20 rounded-xl p-4 space-y-3 shadow-lg shadow-amber-500/[0.02]">
-                        <div className="flex items-center space-x-2 border-b border-slate-850 pb-2">
+                        <div className="flex items-center space-x-2 border-b border-slate-800 pb-2">
                           <Sparkles className="h-4 w-4 text-amber-500" />
                           <h4 className="text-xs font-bold text-white uppercase tracking-wider">Expert Applications ({selectedOrder.applicants.length})</h4>
                         </div>
@@ -803,7 +806,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                                   Accept & Assign
                                 </button>
                               </div>
-                              <p className="text-[11px] text-slate-300 bg-slate-950 border border-slate-850 p-2 rounded leading-relaxed whitespace-pre-wrap font-light">
+                              <p className="text-[11px] text-slate-300 bg-slate-950 border border-slate-800 p-2 rounded leading-relaxed whitespace-pre-wrap font-light">
                                 "{applicant.proposal}"
                               </p>
                               <span className="text-[9px] text-slate-500 block font-light">Applied: {new Date(applicant.applied_at).toLocaleDateString()}</span>
@@ -816,7 +819,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                     {/* EXPERT SUBMISSION REVIEW & SCREENSHOT SETUP (shows when expert submits files) */}
                     {selectedOrder.expert_submission_name && (
                       <div className="bg-purple-500/5 border border-purple-500/20 rounded-xl p-4 space-y-4">
-                        <div className="flex items-center justify-between border-b border-slate-850 pb-2">
+                        <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                           <div className="flex items-center gap-2">
                             <div className="h-2 w-2 rounded-full bg-purple-400 animate-pulse" />
                             <h4 className="text-xs font-bold text-purple-300 uppercase tracking-wider">Expert Solution Submission</h4>
@@ -824,7 +827,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                           <span className="text-[9px] bg-purple-500/10 text-purple-400 border border-purple-500/20 px-2 py-0.5 rounded-full font-bold uppercase">{selectedOrder.status}</span>
                         </div>
 
-                        <div className="flex items-center justify-between bg-slate-950 border border-slate-850 rounded-lg px-3 py-2.5">
+                        <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-lg px-3 py-2.5">
                           <div className="flex items-center gap-2">
                             <Paperclip className="h-4 w-4 text-purple-400 shrink-0" />
                             <span className="text-xs text-white font-mono">{selectedOrder.expert_submission_name}</span>
@@ -841,7 +844,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                         <div className="space-y-2">
                           <label className="block text-[10px] font-bold text-slate-400 uppercase">Review Previews (Screenshots for Student)</label>
                           <div className="flex items-center gap-2">
-                            <label className="flex items-center gap-1.5 bg-slate-950 hover:bg-slate-900 border border-slate-850 hover:border-purple-500 rounded-lg py-1.5 px-3 text-slate-400 hover:text-white text-xs cursor-pointer transition-colors">
+                            <label className="flex items-center gap-1.5 bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-purple-500 rounded-lg py-1.5 px-3 text-slate-400 hover:text-white text-xs cursor-pointer transition-colors">
                               <Upload className="h-3.5 w-3.5" />
                               <span>{isUploadingScreenshots ? 'Uploading...' : 'Upload Screenshots'}</span>
                               <input type="file" accept="image/*" multiple className="hidden"
@@ -893,7 +896,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                           />
                           <label
                             htmlFor="delivery-file-upload-input"
-                            className="flex-1 min-w-0 bg-slate-950 border border-slate-850 hover:border-emerald-500 rounded-lg py-1.5 px-3 text-slate-400 hover:text-white text-xs transition-colors cursor-pointer flex items-center justify-between gap-2"
+                            className="flex-1 min-w-0 bg-slate-950 border border-slate-800 hover:border-emerald-500 rounded-lg py-1.5 px-3 text-slate-400 hover:text-white text-xs transition-colors cursor-pointer flex items-center justify-between gap-2"
                           >
                             <span className="truncate">{deliveryFileName || (deliveryFileContent ? 'File loaded' : 'Choose delivery file...')}</span>
                             <Upload className="h-3.5 w-3.5 shrink-0" />
@@ -915,8 +918,8 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
 
                 </div>
               ) : (
-                <div className="h-[55vh] flex flex-col items-center justify-center border border-dashed border-slate-850 rounded-2xl bg-slate-900/10 text-center p-6 space-y-3">
-                  <div className="p-4 bg-slate-950 text-slate-500 rounded-full border border-slate-850">
+                <div className="h-[55vh] flex flex-col items-center justify-center border border-dashed border-slate-800 rounded-2xl bg-slate-900/10 text-center p-6 space-y-3">
+                  <div className="p-4 bg-slate-950 text-slate-500 rounded-full border border-slate-800">
                     <FileText className="h-10 w-10" />
                   </div>
                   <h3 className="text-white font-bold text-base">Select assignment ledger</h3>
@@ -931,10 +934,10 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
         )}
 
         {activeTab === 'messages' && (
-          <div className="bg-slate-900 border border-slate-850 rounded-2xl p-5 sm:p-8 space-y-6">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-6">
             <div className="flex justify-between items-center pb-3 border-b border-slate-800">
               <h2 className="text-base sm:text-lg font-bold text-white tracking-wide uppercase font-mono">Contact Desk Inquiries</h2>
-              <span className="bg-slate-850 text-slate-300 text-xs font-mono py-0.5 px-2 rounded-md">{contactMessages.length} Messages total</span>
+              <span className="bg-slate-800 text-slate-300 text-xs font-mono py-0.5 px-2 rounded-md">{contactMessages.length} Messages total</span>
             </div>
 
             {contactMessages.length === 0 ? (
@@ -945,7 +948,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                   <div
                     key={msg.id}
                     className={`p-4 rounded-xl border flex flex-col sm:flex-row items-start justify-between gap-4 transition-all ${
-                      msg.is_read ? 'bg-slate-950/20 border-slate-850 opacity-70' : 'bg-slate-950/60 border-amber-500/30 shadow-md'
+                      msg.is_read ? 'bg-slate-950/20 border-slate-800 opacity-70' : 'bg-slate-950/60 border-amber-500/30 shadow-md'
                     }`}
                   >
                     <div className="space-y-2 min-w-0 flex-1">
@@ -973,7 +976,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                         onClick={() => handleToggleMessageRead(msg.id)}
                         className={`p-2 rounded-lg text-xs font-bold border transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                           msg.is_read
-                            ? 'border-slate-800 bg-slate-850 text-slate-400 hover:text-white'
+                            ? 'border-slate-800 bg-slate-800 text-slate-400 hover:text-white'
                             : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
                         }`}
                         title={msg.is_read ? 'Mark as Unread' : 'Mark as Read'}
@@ -998,7 +1001,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
         )}
 
         {activeTab === 'applications' && (
-          <div className="bg-slate-900 border border-slate-850 rounded-2xl p-5 sm:p-8 space-y-6">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-6">
             <div className="flex justify-between items-center pb-3 border-b border-slate-800">
               <h2 className="text-base sm:text-lg font-bold text-white tracking-wide uppercase font-mono flex items-center gap-2">
                 <span>Expert Candidate Applications</span>
@@ -1043,7 +1046,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                         )}
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs bg-slate-950/40 p-3 rounded-lg border border-slate-850">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs bg-slate-950/40 p-3 rounded-lg border border-slate-800">
                         <div>
                           <strong className="text-slate-400 uppercase text-[9px] tracking-wider block mb-0.5">Highest Qualification</strong>
                           <span className="text-slate-100 font-semibold">{app.degree}</span>
@@ -1060,7 +1063,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
 
                       <div className="space-y-1.5">
                         <h4 className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Candidate Experience & Biography</h4>
-                        <p className="text-xs text-slate-200 leading-relaxed font-light bg-slate-950 p-3 rounded-lg border border-slate-850 whitespace-pre-wrap">{app.experience}</p>
+                        <p className="text-xs text-slate-200 leading-relaxed font-light bg-slate-950 p-3 rounded-lg border border-slate-800 whitespace-pre-wrap">{app.experience}</p>
                       </div>
 
                       {app.documents && app.documents.length > 0 && (
@@ -1071,7 +1074,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                               <button
                                 key={docIdx}
                                 onClick={() => downloadBase64File(doc.content, doc.name, doc.type)}
-                                className="flex items-center space-x-2 bg-slate-950 hover:bg-slate-900 border border-slate-850 hover:border-slate-700/80 px-3 py-1.5 rounded-xl text-xs text-left cursor-pointer transition-all outline-none"
+                                className="flex items-center space-x-2 bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-slate-700/80 px-3 py-1.5 rounded-xl text-xs text-left cursor-pointer transition-all outline-none"
                                 title="Click to download verification document"
                               >
                                 <Paperclip className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
@@ -1117,7 +1120,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
         )}
 
         {activeTab === 'payments' && (
-          <div className="bg-slate-900 border border-slate-850 rounded-2xl p-5 sm:p-8 space-y-6">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-6">
             
             {/* Table Header / Title */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-800 pb-4 gap-4">
@@ -1135,11 +1138,11 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                   placeholder="Search Ref, ID, Order ID..."
                   value={paymentsSearch}
                   onChange={(e) => setPaymentsSearch(e.target.value)}
-                  className="bg-slate-950 border border-slate-850 focus:border-amber-500 rounded-lg py-1.5 px-3 text-white text-xs outline-none transition-colors w-full sm:w-48"
+                  className="bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg py-1.5 px-3 text-white text-xs outline-none transition-colors w-full sm:w-48"
                 />
                 <button
                   onClick={fetchAdminData}
-                  className="p-2 bg-slate-950 hover:bg-slate-850 border border-slate-850 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                  className="p-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
                 >
                   <RefreshCw className="h-4 w-4" />
                 </button>
@@ -1149,7 +1152,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
             {/* Financial Stats Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
               
-              <div className="bg-slate-950 border border-slate-850 p-4 rounded-xl space-y-1 shadow-md">
+              <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-1 shadow-md">
                 <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                   <span>Gross Volume (ETB / USD)</span>
                   <DollarSign className="h-3.5 w-3.5 text-amber-500" />
@@ -1164,7 +1167,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                 </div>
               </div>
 
-              <div className="bg-slate-950 border border-slate-850 p-4 rounded-xl space-y-1 shadow-md">
+              <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-1 shadow-md">
                 <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                   <span>Admin Cut (10%)</span>
                   <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
@@ -1179,7 +1182,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                 </div>
               </div>
 
-              <div className="bg-slate-950 border border-slate-850 p-4 rounded-xl space-y-1 shadow-md">
+              <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-1 shadow-md">
                 <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                   <span>Expert Allocation (90%)</span>
                   <Users className="h-3.5 w-3.5 text-sky-500" />
@@ -1194,7 +1197,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                 </div>
               </div>
 
-              <div className="bg-slate-950 border border-slate-850 p-4 rounded-xl space-y-1 shadow-md">
+              <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-1 shadow-md">
                 <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                   <span>Settled Transactions</span>
                   <Check className="h-3.5 w-3.5 text-emerald-500" />
@@ -1219,14 +1222,14 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
               );
 
               return filtered.length === 0 ? (
-                <div className="text-center py-16 bg-slate-950/20 border border-slate-850 rounded-xl text-slate-500 text-xs font-light">
+                <div className="text-center py-16 bg-slate-950/20 border border-slate-800 rounded-xl text-slate-500 text-xs font-light">
                   No payment transactions match search filters or exist.
                 </div>
               ) : (
-                <div className="overflow-x-auto border border-slate-850 rounded-xl">
+                <div className="overflow-x-auto border border-slate-800 rounded-xl">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
-                      <tr className="bg-slate-950 text-slate-400 border-b border-slate-850 font-mono font-bold uppercase tracking-wider">
+                      <tr className="bg-slate-950 text-slate-400 border-b border-slate-800 font-mono font-bold uppercase tracking-wider">
                         <th className="p-3">Payment ID</th>
                         <th className="p-3">Order ID</th>
                         <th className="p-3">Method</th>
@@ -1237,7 +1240,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                         <th className="p-3">Date</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-850/60 bg-slate-950/20">
+                    <tbody className="divide-y divide-slate-800/60 bg-slate-950/20">
                       {filtered.map((p) => (
                         <tr key={p.id} className="hover:bg-slate-900/40 transition-colors">
                           <td className="p-3 font-mono text-slate-300">

@@ -46,12 +46,6 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
   const [expertGpa, setExpertGpa] = useState('');
   const [expertDocuments, setExpertDocuments] = useState<Array<{ name: string; size?: number; type?: string; content?: string }>>([]);
   const [isDragging, setIsDragging] = useState(false);
-  const mountedRef = useRef(true);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => { mountedRef.current = false; };
-  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -241,9 +235,10 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
     try {
       const ordersResult = await fallbackDb.getOrders(1, 500);
       const allOrders = ordersResult.data;
-      // Filter orders by current user email (case insensitive)
+      
+      // Filter orders by current user email (case insensitive) — null-safe
       const clientOrders = allOrders.filter(
-        o => o.client_email.toLowerCase() === user.email.toLowerCase()
+        o => o.client_email && o.client_email.toLowerCase() === user.email.toLowerCase()
       );
       setOrders(clientOrders);
       
@@ -253,7 +248,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
         if (updatedSelected) setSelectedOrder(updatedSelected);
       }
     } catch (e) {
-      console.error('Error fetching client orders:', e);
+      console.error('[Dashboard] Error fetching client orders:', e);
     } finally {
       setIsLoading(false);
     }
@@ -436,7 +431,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
 
       const res = await fetch('/api/payments', {
         method: 'POST',
-        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        headers: { ...(await getAuthHeaders()), 'Content-Type': 'application/json' },
         body: JSON.stringify({
           order_id: selectedOrder.id,
           payment_screenshot: screenshotUrl,
@@ -810,11 +805,16 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
 
       {/* ACTIVE WORKSPACE OVERLAY MODAL */}
       {selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          onKeyDown={(e) => { if (e.key === 'Escape') setSelectedOrder(null); }}
+        >
           <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-6xl w-full h-[90vh] overflow-hidden shadow-2xl relative animate-in fade-in zoom-in-95 duration-150 flex flex-col">
             
             {/* Modal Header */}
-            <header className="p-5 border-b border-slate-850 flex justify-between items-center bg-slate-950/50 shrink-0">
+            <header className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-950/50 shrink-0">
               <div className="flex items-center space-x-3">
                 <span className="text-xs font-mono font-bold text-amber-500 bg-amber-500/10 px-2.5 py-1 rounded-md border border-amber-500/20">{selectedOrder.id}</span>
                 <div className="h-1.5 w-1.5 rounded-full bg-slate-700"></div>
@@ -838,7 +838,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                   className={`px-4 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-2 ${
                     activeTab === 'status'
                       ? 'bg-amber-500 text-[#0F172A] shadow-md'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
                   }`}
                 >
                   <Clock className="h-4 w-4" />
@@ -849,7 +849,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                   className={`px-4 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-2 relative ${
                     activeTab === 'chat'
                       ? 'bg-amber-500 text-[#0F172A] shadow-md'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
                   }`}
                 >
                   <MessageSquare className="h-4 w-4" />
@@ -860,7 +860,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                   className={`px-4 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-2 ${
                     activeTab === 'specs'
                       ? 'bg-amber-500 text-[#0F172A] shadow-md'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
                   }`}
                 >
                   <FileText className="h-4 w-4" />
@@ -948,7 +948,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                               ? 'bg-amber-500 text-[#0F172A] border-slate-900'
                               : selectedOrder.payment_status === 'approved'
                               ? 'bg-amber-500/10 text-amber-400 border-amber-500/50 animate-pulse'
-                              : 'bg-slate-900 text-slate-500 border-slate-850'
+                              : 'bg-slate-900 text-slate-500 border-slate-800'
                           }`}>
                             {selectedOrder.status === 'delivered' ? (
                               <Check className="h-5 w-5 stroke-[3]" />
@@ -974,7 +974,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                               ? 'bg-amber-500 text-[#0F172A] border-slate-900'
                               : selectedOrder.status === 'under_review'
                               ? 'bg-amber-500/10 text-amber-400 border-amber-500/50 animate-pulse'
-                              : 'bg-slate-900 text-slate-500 border-slate-850'
+                              : 'bg-slate-900 text-slate-500 border-slate-800'
                           }`}>
                             {selectedOrder.status === 'delivered' ? (
                               <Check className="h-5 w-5 stroke-[3]" />
@@ -998,7 +998,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                           <div className={`h-10 w-10 rounded-full flex items-center justify-center font-bold border-4 transition-all ${
                             selectedOrder.status === 'delivered'
                               ? 'bg-emerald-500 text-[#0F172A] border-slate-900 shadow-lg shadow-emerald-500/20'
-                              : 'bg-slate-900 text-slate-500 border-slate-850'
+                              : 'bg-slate-900 text-slate-500 border-slate-800'
                           }`}>
                             {selectedOrder.status === 'delivered' ? (
                               <CheckCircle2 className="h-5 w-5" />
@@ -1031,7 +1031,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                           <div className={`mt-0.5 h-6 w-6 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
                             selectedOrder.payment_status === 'approved'
                               ? 'bg-amber-500 text-[#0F172A]'
-                              : 'bg-slate-850 text-slate-400 animate-pulse border border-slate-700'
+                              : 'bg-slate-800 text-slate-400 animate-pulse border border-slate-700'
                           }`}>
                             {selectedOrder.payment_status === 'approved' ? '✓' : '2'}
                           </div>
@@ -1051,7 +1051,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                               ? 'bg-amber-500 text-[#0F172A]'
                               : selectedOrder.payment_status === 'approved'
                               ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 animate-pulse'
-                              : 'bg-slate-850 text-slate-500'
+                              : 'bg-slate-800 text-slate-500'
                           }`}>
                             {selectedOrder.status === 'delivered' ? '✓' : '3'}
                           </div>
@@ -1073,7 +1073,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                               ? 'bg-amber-500 text-[#0F172A]'
                               : selectedOrder.status === 'under_review'
                               ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 animate-pulse'
-                              : 'bg-slate-850 text-slate-500'
+                              : 'bg-slate-800 text-slate-500'
                           }`}>
                             {selectedOrder.status === 'delivered' ? '✓' : '4'}
                           </div>
@@ -1093,7 +1093,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                           <div className={`mt-0.5 h-6 w-6 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
                             selectedOrder.status === 'delivered'
                               ? 'bg-emerald-500 text-[#0F172A]'
-                              : 'bg-slate-850 text-slate-500'
+                              : 'bg-slate-800 text-slate-500'
                           }`}>
                             {selectedOrder.status === 'delivered' ? '✓' : '5'}
                           </div>
@@ -1125,7 +1125,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                           Your expert has uploaded a watermarked preview sample of the work. The full model answer will unlock for download immediately upon payment approval.
                         </p>
 
-                        <div className="relative border border-slate-850 rounded-xl overflow-hidden bg-slate-950 p-6 flex flex-col items-center justify-center min-h-[180px]">
+                        <div className="relative border border-slate-800 rounded-xl overflow-hidden bg-slate-950 p-6 flex flex-col items-center justify-center min-h-[180px]">
                           {/* Blur/Lock Overlay */}
                           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-[6px] z-10 flex flex-col items-center justify-center text-center p-4">
                             <span className="bg-amber-500 text-slate-950 p-2 rounded-full mb-3 shadow-lg shadow-amber-500/20">
@@ -1211,7 +1211,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                         </div>
 
                         {/* Real-time Invoice Details */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 bg-slate-950/60 p-4 rounded-xl border border-slate-850">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 bg-slate-950/60 p-4 rounded-xl border border-slate-800">
                           <div>
                             <span className="block text-[10px] text-slate-500 uppercase font-mono">Invoice Amount</span>
                             <span className="text-lg font-black text-white font-mono">
@@ -1249,7 +1249,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                                   className={`p-3 rounded-xl border text-xs font-bold transition-all text-center ${
                                     paymentMethodType === 'ethiopia' && ethiopianBank === 'cbe'
                                       ? 'bg-amber-500/10 text-amber-400 border-amber-500'
-                                      : 'bg-slate-950 border-slate-850 text-slate-400 hover:text-white'
+                                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
                                   }`}
                                 >
                                   CBE
@@ -1263,7 +1263,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                                   className={`p-3 rounded-xl border text-xs font-bold transition-all text-center ${
                                     paymentMethodType === 'ethiopia' && ethiopianBank === 'telebirr'
                                       ? 'bg-amber-500/10 text-amber-400 border-amber-500'
-                                      : 'bg-slate-950 border-slate-850 text-slate-400 hover:text-white'
+                                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
                                   }`}
                                 >
                                   Telebirr
@@ -1277,7 +1277,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                                   className={`p-3 rounded-xl border text-xs font-bold transition-all text-center ${
                                     paymentMethodType === 'ethiopia' && ethiopianBank === 'boa'
                                       ? 'bg-amber-500/10 text-amber-400 border-amber-500'
-                                      : 'bg-slate-950 border-slate-850 text-slate-400 hover:text-white'
+                                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
                                   }`}
                                 >
                                   BOA
@@ -1290,7 +1290,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                                   className={`p-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                                     paymentMethodType === 'crypto'
                                       ? 'bg-amber-500/10 text-amber-400 border-amber-500'
-                                      : 'bg-slate-950 border-slate-850 text-slate-400 hover:text-white'
+                                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
                                   }`}
                                 >
                                   Crypto
@@ -1304,7 +1304,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                                   className={`p-3 rounded-xl border text-xs font-bold transition-all text-center ${
                                     paymentMethodType === 'card'
                                       ? 'bg-amber-500/10 text-amber-400 border-amber-500'
-                                      : 'bg-slate-950 border-slate-850 text-slate-400 hover:text-white'
+                                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
                                   }`}
                                 >
                                   Card
@@ -1313,7 +1313,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                             </div>
 
                             {/* Instructions panel — values from server config */}
-                            <div className="bg-slate-950 border border-slate-850 rounded-xl p-4 space-y-4 text-xs">
+                            <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-4 text-xs">
                               {paymentMethodType === 'ethiopia' && ethiopianBank === 'cbe' && paymentConfig?.ethiopia?.cbe && (
                                 <div className="space-y-3">
                                   <h6 className="font-bold text-white uppercase tracking-wider text-[10px]">Commercial Bank of Ethiopia (CBE)</h6>
@@ -1435,7 +1435,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                                 />
                                 <label
                                   htmlFor="payment-proof-upload"
-                                  className="flex-1 bg-slate-950 border border-slate-850 hover:border-amber-500 rounded-xl py-3 px-4 text-slate-400 hover:text-white text-xs transition-all cursor-pointer flex items-center justify-between"
+                                  className="flex-1 bg-slate-950 border border-slate-800 hover:border-amber-500 rounded-xl py-3 px-4 text-slate-400 hover:text-white text-xs transition-all cursor-pointer flex items-center justify-between"
                                 >
                                   <span>{paymentScreenshotName || 'Choose file...'}</span>
                                   <Upload className="h-4 w-4" />
@@ -1470,7 +1470,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-950/40 p-4 rounded-xl border border-slate-850 text-xs">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-950/40 p-4 rounded-xl border border-slate-800 text-xs">
                           <div>
                             <span className="block text-slate-500 text-[10px] uppercase font-bold tracking-wider">Estimated Delivery Schedule</span>
                             <span className="text-white font-mono font-medium block mt-0.5">
@@ -1614,7 +1614,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
               {activeTab === 'chat' && (
                 <div className="flex-1 overflow-hidden flex flex-col bg-slate-950/10">
                   {/* Chat Sub-Header */}
-                  <div className="px-6 py-3 border-b border-slate-850 flex items-center justify-between bg-slate-950/30 shrink-0">
+                  <div className="px-6 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/30 shrink-0">
                     <div className="flex items-center space-x-2">
                       <MessageSquare className="h-4 w-4 text-amber-500" />
                       <span className="text-xs font-bold text-white uppercase tracking-wider font-mono">Specialist Messaging Portal</span>
@@ -1640,7 +1640,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                           key={m.id}
                           className={`flex flex-col max-w-[80%] rounded-2xl p-4 text-xs shadow-sm border ${
                             m.is_admin
-                              ? 'bg-slate-850 text-slate-100 self-start border-slate-800'
+                              ? 'bg-slate-800 text-slate-100 self-start border-slate-800'
                               : 'bg-amber-500/10 text-amber-100 border-amber-500/10 self-end'
                           }`}
                         >
@@ -1660,7 +1660,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                   </div>
 
                   {/* Chat Input form footer */}
-                  <footer className="p-4 border-t border-slate-850 bg-slate-950/60 shrink-0">
+                  <footer className="p-4 border-t border-slate-800 bg-slate-950/60 shrink-0">
                     <form onSubmit={handlePostMessage} className="flex gap-2.5 max-w-5xl mx-auto">
                       <input
                         type="text"
@@ -1693,22 +1693,22 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
 
                   {/* Blueprint parameters list */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-slate-950/50 border border-slate-850 p-4 rounded-xl space-y-1">
+                    <div className="bg-slate-950/50 border border-slate-800 p-4 rounded-xl space-y-1">
                       <span className="block text-[9px] text-slate-500 uppercase font-bold tracking-wider">Service Project Category</span>
                       <span className="text-white text-sm font-semibold">{selectedOrder.service_type}</span>
                     </div>
 
-                    <div className="bg-slate-950/50 border border-slate-850 p-4 rounded-xl space-y-1">
+                    <div className="bg-slate-950/50 border border-slate-800 p-4 rounded-xl space-y-1">
                       <span className="block text-[9px] text-slate-500 uppercase font-bold tracking-wider">Academic Grade Level</span>
                       <span className="text-white text-sm font-semibold">{selectedOrder.academic_level}</span>
                     </div>
 
-                    <div className="bg-slate-950/50 border border-slate-850 p-4 rounded-xl space-y-1">
+                    <div className="bg-slate-950/50 border border-slate-800 p-4 rounded-xl space-y-1">
                       <span className="block text-[9px] text-slate-500 uppercase font-bold tracking-wider">Allocated Financial Budget</span>
                       <span className="text-amber-400 text-sm font-bold font-mono">{selectedOrder.budget_range}</span>
                     </div>
 
-                    <div className="bg-slate-950/50 border border-slate-850 p-4 rounded-xl space-y-1">
+                    <div className="bg-slate-950/50 border border-slate-800 p-4 rounded-xl space-y-1">
                       <span className="block text-[9px] text-slate-500 uppercase font-bold tracking-wider">Deadline Schedule</span>
                       <span className="text-white text-sm font-semibold font-mono">
                         {new Date(selectedOrder.deadline).toLocaleDateString([], {
@@ -1723,7 +1723,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                   </div>
 
                   {/* Description Box */}
-                  <div className="bg-slate-950/50 border border-slate-850 p-5 rounded-2xl space-y-2.5">
+                  <div className="bg-slate-950/50 border border-slate-800 p-5 rounded-2xl space-y-2.5">
                     <span className="block text-[9px] text-slate-500 uppercase font-bold tracking-wider">Original Project Prompt SPEC</span>
                     <p className="text-slate-200 text-xs leading-relaxed font-light whitespace-pre-wrap max-h-60 overflow-y-auto pr-2">
                       {selectedOrder.description}
@@ -1732,7 +1732,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
 
                   {/* Special Instructions & guidelines attachment */}
                   {(selectedOrder.special_instructions || selectedOrder.file_name) && (
-                    <div className="border-t border-slate-850/60 pt-5 space-y-4">
+                    <div className="border-t border-slate-800/60 pt-5 space-y-4">
                       {selectedOrder.special_instructions && (
                         <div className="bg-amber-500/5 border border-amber-500/10 p-4 rounded-xl space-y-1.5">
                           <span className="block text-amber-400 text-[9px] uppercase font-bold tracking-wider">Special References & Software Specifications</span>
@@ -1741,7 +1741,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                       )}
 
                       {selectedOrder.file_name && (
-                        <div className="flex items-center justify-between text-xs text-slate-400 bg-slate-950/30 border border-slate-850 p-3 rounded-xl w-full">
+                        <div className="flex items-center justify-between text-xs text-slate-400 bg-slate-950/30 border border-slate-800 p-3 rounded-xl w-full">
                           <div className="flex items-center space-x-2 truncate">
                             <span className="font-semibold text-slate-500 shrink-0">Guidelines Attachment:</span>
                             <span className="text-slate-300 font-mono truncate max-w-[200px]">{selectedOrder.file_name}</span>
@@ -1941,7 +1941,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                         {expertDocuments.map((doc, idx) => (
                           <div
                             key={idx}
-                            className="flex items-center justify-between bg-slate-950/60 border border-slate-850 p-2 rounded-xl text-xs"
+                            className="flex items-center justify-between bg-slate-950/60 border border-slate-800 p-2 rounded-xl text-xs"
                           >
                             <div className="flex items-center space-x-2 text-slate-300 min-w-0">
                               <Paperclip className="h-3 w-3 text-emerald-400 shrink-0" />

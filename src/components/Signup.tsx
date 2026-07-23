@@ -85,7 +85,7 @@ export default function Signup({ setCurrentPage, showToast }: SignupProps) {
   return (
     <div className="bg-[#0F172A] font-sans text-slate-100 min-h-[80vh] flex items-center justify-center px-4 py-16" id="signup-page-container">
       
-      <div className="max-w-md w-full bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl space-y-6 relative overflow-hidden">
+      <div className="max-w-md w-full bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl space-y-6 relative overflow-hidden animate-fade-in-up">
         
         {/* Subtle glow */}
         <div className="absolute top-0 left-0 w-24 h-24 bg-amber-500/5 rounded-full filter blur-xl pointer-events-none"></div>

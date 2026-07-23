@@ -12,12 +12,21 @@ export const supabase = supabaseUrl && supabaseAnonKey
 
 /**
  * Returns auth headers for backend API requests.
- * Sends the Supabase JWT as Authorization: Bearer <token> header.
- * Falls back to X-User-Email for backward compatibility.
+ * Uses the Supabase client's getSession() to get a fresh (auto-refreshed) JWT.
+ * Falls back to reading from localStorage if Supabase client is unavailable.
  */
-export const getAuthHeaders = (): Record<string, string> => {
+export const getAuthHeaders = async (): Promise<Record<string, string>> => {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   try {
+    // Prefer Supabase client session (auto-refreshes expired tokens)
+    if (supabase) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+        return headers;
+      }
+    }
+    // Fallback: read raw token from localStorage
     const stored = localStorage.getItem('ace_scholar_current_user');
     if (stored) {
       const user = JSON.parse(stored);
@@ -48,7 +57,7 @@ export const fallbackDb = {
 
   getProfiles: async (page = 1, limit = 50): Promise<{ data: Profile[]; total: number; page: number; limit: number }> => {
     try {
-      const res = await fetch(`/api/profiles?page=${page}&limit=${limit}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/profiles?page=${page}&limit=${limit}`, { headers: await getAuthHeaders() });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || `HTTP ${res.status}`);
@@ -64,7 +73,7 @@ export const fallbackDb = {
     try {
       await fetch('/api/profiles/sync', {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers: await getAuthHeaders(),
         body: JSON.stringify(profiles),
       });
     } catch (e) {
@@ -78,7 +87,8 @@ export const fallbackDb = {
 
   getOrders: async (page = 1, limit = 50): Promise<{ data: Order[]; total: number; page: number; limit: number }> => {
     try {
-      const res = await fetch(`/api/orders?page=${page}&limit=${limit}`, { headers: getAuthHeaders() });
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/orders?page=${page}&limit=${limit}`, { headers });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || `HTTP ${res.status}`);
@@ -98,7 +108,7 @@ export const fallbackDb = {
     try {
       await fetch('/api/orders/sync', {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers: await getAuthHeaders(),
         body: JSON.stringify(orders),
       });
     } catch (e) {
@@ -113,7 +123,7 @@ export const fallbackDb = {
     try {
       const res = await fetch('/api/orders', {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers: await getAuthHeaders(),
         body: JSON.stringify(order),
       });
       if (!res.ok) {
@@ -134,7 +144,7 @@ export const fallbackDb = {
     try {
       const res = await fetch(`/api/orders/${orderId}`, {
         method: 'PUT',
-        headers: getAuthHeaders(),
+        headers: await getAuthHeaders(),
         body: JSON.stringify(updates),
       });
       if (!res.ok) {
@@ -154,7 +164,7 @@ export const fallbackDb = {
 
   getMessages: async (page = 1, limit = 100): Promise<{ data: Message[]; total: number; page: number; limit: number }> => {
     try {
-      const res = await fetch(`/api/messages?page=${page}&limit=${limit}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/messages?page=${page}&limit=${limit}`, { headers: await getAuthHeaders() });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || `HTTP ${res.status}`);
@@ -168,7 +178,7 @@ export const fallbackDb = {
 
   getMessagesByOrder: async (orderId: string): Promise<Message[]> => {
     try {
-      const res = await fetch(`/api/messages/${orderId}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/messages/${orderId}`, { headers: await getAuthHeaders() });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || `HTTP ${res.status}`);
@@ -187,7 +197,7 @@ export const fallbackDb = {
     try {
       const res = await fetch('/api/messages', {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers: await getAuthHeaders(),
         body: JSON.stringify(message),
       });
       if (!res.ok) {
@@ -205,7 +215,7 @@ export const fallbackDb = {
     try {
       await fetch('/api/messages/sync', {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers: await getAuthHeaders(),
         body: JSON.stringify(messages),
       });
     } catch (e) {
@@ -219,7 +229,7 @@ export const fallbackDb = {
 
   getContactMessages: async (page = 1, limit = 50): Promise<{ data: ContactMessage[]; total: number; page: number; limit: number }> => {
     try {
-      const res = await fetch(`/api/contacts?page=${page}&limit=${limit}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/contacts?page=${page}&limit=${limit}`, { headers: await getAuthHeaders() });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || `HTTP ${res.status}`);
@@ -238,7 +248,7 @@ export const fallbackDb = {
     try {
       const res = await fetch('/api/contacts', {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers: await getAuthHeaders(),
         body: JSON.stringify(message),
       });
       if (!res.ok) {
@@ -256,7 +266,7 @@ export const fallbackDb = {
     try {
       await fetch('/api/contacts/sync', {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers: await getAuthHeaders(),
         body: JSON.stringify(messages),
       });
     } catch (e) {
@@ -312,7 +322,7 @@ export const fallbackDb = {
     try {
       const res = await fetch('/api/upload', {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers: await getAuthHeaders(),
         body: JSON.stringify({
           file: fileData,
           fileName: fileName || `upload-${Date.now()}.png`,
@@ -336,7 +346,7 @@ export const fallbackDb = {
 
   getPayments: async (): Promise<Payment[]> => {
     try {
-      const res = await fetch('/api/payments', { headers: getAuthHeaders() });
+      const res = await fetch('/api/payments', { headers: await getAuthHeaders() });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || `HTTP ${res.status}`);

@@ -120,10 +120,8 @@ router.post('/', async (req: Request, res: Response) => {
     const content = sanitizeText(rawContent, 10000);
     const sender_name = sanitizeText(rawSenderName, 200) || 'Anonymous';
 
-    let sender_id = req.body.sender_id ? safeString(req.body.sender_id) : null;
-    if (sender_id && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sender_id)) {
-      sender_id = null;
-    }
+    // Use authenticated user's ID — never trust client-supplied sender_id
+    const sender_id = requester.id;
 
     const newMsg = {
       id: req.body.id || crypto.randomUUID(),

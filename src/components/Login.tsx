@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { LogIn, Mail, Lock, GraduationCap, AlertTriangle, RefreshCw } from 'lucide-react';
 import { PageType, Profile } from '../types';
+import { supabase } from '../lib/supabase';
 
 interface LoginProps {
   setCurrentPage: (page: PageType) => void;
@@ -64,6 +65,14 @@ export default function Login({ setCurrentPage, setUser, showToast, redirectPage
       localStorage.setItem('ace_scholar_current_user', JSON.stringify(user));
       setUser(user);
 
+      // Initialize Supabase client session for automatic token refresh
+      if (supabase && user.access_token && user.refresh_token) {
+        await supabase.auth.setSession({
+          access_token: user.access_token,
+          refresh_token: user.refresh_token,
+        });
+      }
+
       if (showToast) showToast('Logged in successfully!', 'success');
 
       let targetPage: PageType = 'dashboard';
@@ -122,7 +131,7 @@ export default function Login({ setCurrentPage, setUser, showToast, redirectPage
   return (
     <div className="bg-[#0F172A] font-sans text-slate-100 min-h-[80vh] flex items-center justify-center px-4 py-16" id="login-page-container">
       
-      <div className="max-w-md w-full bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl space-y-6 relative overflow-hidden">
+      <div className="max-w-md w-full bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl space-y-6 relative overflow-hidden animate-fade-in-up">
         
         {/* Subtle glow */}
         <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full filter blur-xl pointer-events-none"></div>

@@ -46,6 +46,7 @@ router.post('/signup', enforceBodyLimit(10 * 1024), async (req: Request, res: Re
       role,
       created_at: new Date().toISOString(),
       access_token: data.session?.access_token || null,
+      refresh_token: data.session?.refresh_token || null,
     };
 
     return res.status(201).json(profileObj);
@@ -108,6 +109,7 @@ router.post('/login', enforceBodyLimit(10 * 1024), async (req: Request, res: Res
       expert_status: profileRow?.expert_status || user.user_metadata?.expert_status || null,
       expert_signup_at: profileRow?.expert_signup_at || user.user_metadata?.expert_signup_at || null,
       access_token: data.session?.access_token || null,
+      refresh_token: data.session?.refresh_token || null,
     };
 
     return res.json(userProfile);

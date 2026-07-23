@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Clock, Upload,
   ChevronLeft, ShieldCheck, Lock,
@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { PageType, Profile, Order as AcademicOrder } from '../types';
 import { fallbackDb } from '../lib/supabase';
-import IosDateTimePicker from './IosDateTimePicker';
+
 
 export function getBasePrice(category: string, countryName: string) {
   if (category === 'Simple Assignment') return 5;
@@ -63,6 +63,7 @@ const STEPS = ['Service', 'Details', 'Budget', 'Review', 'Payment'];
 
 export default function Order({ user, selectedServiceType, setSelectedServiceType, setCurrentPage, showToast, detectedLocation, setRedirectPage }: OrderProps) {
   const [step, setStep] = useState(1);
+  const budgetManuallyEditedRef = useRef(false);
 
   const [serviceType, setServiceType] = useState(selectedServiceType || 'Academic Writing');
   const [subject, setSubject] = useState('');
@@ -153,6 +154,7 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
   const needsDownpayment = budgetInUSD >= 100;
 
   useEffect(() => {
+    if (budgetManuallyEditedRef.current) return;
     const c = getCurrencyDetails();
     const base = getBasePrice(serviceType, country);
     setBudget(String(Math.ceil(base * c.exchangeRate)));
@@ -362,30 +364,31 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
 
   // ─── Main Order Form ───
   return (
-    <div className="bg-[#0F172A] text-slate-100 h-screen font-sans flex flex-col overflow-hidden">
+    <div className="bg-[#0F172A] text-slate-100 min-h-[100dvh] font-sans">
 
       {/* ── Top Bar ── */}
-      <div className="shrink-0 border-b border-slate-800/80 bg-[#0F172A]">
+      <div className="fixed top-0 left-0 right-0 z-30 border-b border-slate-800/80 bg-[#0F172A]">
         <div className="max-w-4xl mx-auto px-4 sm:px-6">
           {/* Row 1: Back + Title */}
-          <div className="flex items-center gap-3 py-3">
+          <div className="flex items-center gap-3 py-2">
             <button onClick={handleGoBack} className="shrink-0 p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer">
               <ChevronLeft className="h-5 w-5" />
             </button>
             <div className="min-w-0">
-              <h1 className="text-base sm:text-lg font-bold text-white truncate">Place Your Order</h1>
+              <h1 className="text-sm sm:text-base font-bold text-white truncate">Place Your Order</h1>
             </div>
           </div>
           {/* Row 2: Step indicator */}
-          <div className="flex items-center gap-0 pb-3 overflow-x-auto">
+          <div className="flex items-center gap-0.5 pb-2 overflow-x-auto">
             {STEPS.map((label, i) => {
-              const isActive = i + 1 === step;
-              const isDone = i + 1 < step;
+              const num = i + 1;
+              const isActive = num === step;
+              const isDone = num < step;
               return (
                 <React.Fragment key={i}>
                   <button
-                    onClick={() => { if (i + 1 < step) setStep(i + 1); }}
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                    onClick={() => { if (isDone) setStep(num); }}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap transition-all ${
                       isActive
                         ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
                         : isDone
@@ -393,19 +396,19 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
                           : 'text-slate-600'
                     }`}
                   >
-                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 transition-all ${
                       isActive
-                        ? 'bg-amber-500 text-[#0F172A]'
+                        ? 'bg-amber-500 text-[#0F172A] shadow-[0_0_8px_rgba(245,158,11,0.4)]'
                         : isDone
                           ? 'bg-emerald-500/20 text-emerald-400'
                           : 'bg-slate-800 text-slate-500'
                     }`}>
-                      {isDone ? <Check className="h-3 w-3" /> : i + 1}
+                      {isDone ? <Check className="h-3 w-3" /> : num}
                     </span>
                     <span className="hidden sm:inline">{label}</span>
                   </button>
                   {i < STEPS.length - 1 && (
-                    <div className={`w-4 sm:w-8 h-px mx-0.5 shrink-0 ${isDone ? 'bg-emerald-500/40' : 'bg-slate-800'}`} />
+                    <div className={`w-2 sm:w-5 h-px mx-0 shrink-0 ${isDone ? 'bg-emerald-500/40' : 'bg-slate-800'}`} />
                   )}
                 </React.Fragment>
               );
@@ -415,43 +418,43 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
       </div>
 
       {/* ── Content ── */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
+      <div className="px-4 sm:px-6 pt-[80px] pb-[56px]">
+        <div className="max-w-4xl mx-auto py-4">
 
           {/* ═══ STEP 1: Service ═══ */}
           {step === 1 && (
-            <div className="space-y-6">
+            <div className="space-y-4">
               <div>
-                <h2 className="text-lg font-bold text-white mb-1">What do you need help with?</h2>
-                <p className="text-sm text-slate-400">Choose the type of project and tell us the subject.</p>
+                <h2 className="text-base font-bold text-white mb-0.5">What do you need help with?</h2>
+                <p className="text-xs text-slate-400">Choose the type of project and tell us the subject.</p>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {SERVICE_OPTIONS.map(opt => (
                   <button key={opt.value} type="button" onClick={() => setServiceType(opt.value)}
-                    className={`group p-4 rounded-xl border text-left transition-all cursor-pointer ${
+                    className={`group p-3 rounded-xl border text-left transition-all cursor-pointer ${
                       serviceType === opt.value
                         ? 'border-amber-500 bg-amber-500/10 ring-1 ring-amber-500/20'
                         : 'border-slate-800 bg-slate-900/50 hover:border-slate-700 hover:bg-slate-900'
                     }`}>
-                    <span className="text-xl block mb-2">{opt.icon}</span>
-                    <h4 className={`text-sm font-bold ${serviceType === opt.value ? 'text-amber-400' : 'text-white group-hover:text-amber-400 transition-colors'}`}>{opt.label}</h4>
-                    <p className="text-[11px] text-slate-500 mt-1 leading-snug">{opt.desc}</p>
+                    <span className="text-lg block mb-1">{opt.icon}</span>
+                    <h4 className={`text-xs font-bold ${serviceType === opt.value ? 'text-amber-400' : 'text-white group-hover:text-amber-400 transition-colors'}`}>{opt.label}</h4>
+                    <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">{opt.desc}</p>
                   </button>
                 ))}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">Subject / Field</label>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Subject / Field</label>
                   <input type="text" value={subject} onChange={e => setSubject(e.target.value)}
                     placeholder="e.g. Mechanical Engineering, Calculus"
-                    className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 rounded-xl py-2.5 px-4 text-sm text-slate-100 outline-none transition-all placeholder:text-slate-600" />
+                    className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 rounded-xl py-2 px-3 text-sm text-slate-100 outline-none transition-all placeholder:text-slate-600 min-h-[40px]" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">Academic Level</label>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Academic Level</label>
                   <select value={academicLevel} onChange={e => setAcademicLevel(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 rounded-xl py-2.5 px-4 text-sm text-slate-100 outline-none transition-all appearance-none cursor-pointer">
+                    className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 rounded-xl py-2 px-3 text-sm text-slate-100 outline-none transition-all appearance-none cursor-pointer">
                     <option value="High School">High School</option>
                     <option value="Undergraduate">Undergraduate (BSc / BA)</option>
                     <option value="Masters">MSc / Postgraduate</option>
@@ -464,37 +467,43 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
 
           {/* ═══ STEP 2: Details ═══ */}
           {step === 2 && (
-            <div className="space-y-6">
+            <div className="space-y-4">
               <div>
-                <h2 className="text-lg font-bold text-white mb-1">Describe your project</h2>
-                <p className="text-sm text-slate-400">The more detail you give, the better your result.</p>
+                <h2 className="text-base font-bold text-white mb-0.5">Describe your project</h2>
+                <p className="text-xs text-slate-400">The more detail you give, the better your result.</p>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Assignment Description</label>
-                <textarea rows={4} value={description} onChange={e => setDescription(e.target.value)}
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Assignment Description</label>
+                <textarea rows={3} value={description} onChange={e => setDescription(e.target.value)}
                   placeholder="Paste your full question, instructions, data parameters, page requirements..."
-                  className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 rounded-xl py-3 px-4 text-sm text-slate-100 outline-none transition-all resize-none placeholder:text-slate-600" />
+                  className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 rounded-xl py-2.5 px-3 text-sm text-slate-100 outline-none transition-all resize-none placeholder:text-slate-600" />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Special Instructions <span className="text-slate-600 font-normal">(optional)</span></label>
+                  <input type="text" value={specialInstructions} onChange={e => setSpecialInstructions(e.target.value)}
+                    placeholder="APA 7th, SolidWorks 2021, MATLAB R2022b..."
+                    className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 rounded-xl py-2 px-3 text-sm text-slate-100 outline-none transition-all placeholder:text-slate-600" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5 text-amber-500" /> Deadline</span>
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={deadline}
+                    onChange={e => setDeadline(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 rounded-xl py-2 px-3 text-sm text-slate-100 outline-none transition-all"
+                  />
+                </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Special Instructions <span className="text-slate-600 font-normal">(optional)</span></label>
-                <input type="text" value={specialInstructions} onChange={e => setSpecialInstructions(e.target.value)}
-                  placeholder="APA 7th, SolidWorks 2021, MATLAB R2022b..."
-                  className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 rounded-xl py-2.5 px-4 text-sm text-slate-100 outline-none transition-all placeholder:text-slate-600" />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5 text-amber-500" /> Deadline</span>
-                </label>
-                <IosDateTimePicker value={deadline} onChange={setDeadline} />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Attachments <span className="text-slate-600 font-normal">(optional)</span></label>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Attachments <span className="text-slate-600 font-normal">(optional)</span></label>
                 <div onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
-                  className={`border-2 border-dashed rounded-xl py-5 px-4 text-center transition-all cursor-pointer ${
+                  className={`border-2 border-dashed rounded-xl py-4 px-3 text-center transition-all cursor-pointer ${
                     isDragging ? 'border-amber-500 bg-amber-500/5' : 'border-slate-800 hover:border-slate-700 bg-slate-900/50'
                   }`}
                   onClick={() => document.getElementById('order-file-picker')?.click()}>
@@ -502,9 +511,9 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
                     <p className="text-sm text-amber-400 font-semibold">{fileName}</p>
                   ) : (
                     <>
-                      <Upload className="h-6 w-6 text-slate-600 mx-auto mb-1.5" />
+                      <Upload className="h-5 w-5 text-slate-600 mx-auto mb-1" />
                       <p className="text-xs text-slate-500">Drop a file here or <span className="text-amber-400">browse</span></p>
-                      <p className="text-[10px] text-slate-600 mt-1">PDF, DOCX, ZIP — up to 40 MB</p>
+                      <p className="text-[10px] text-slate-600 mt-0.5">PDF, DOCX, ZIP — up to 40 MB</p>
                     </>
                   )}
                   <input type="file" id="order-file-picker" onChange={handleFileChange} className="hidden" />
@@ -515,32 +524,32 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
 
           {/* ═══ STEP 3: Budget ═══ */}
           {step === 3 && (
-            <div className="space-y-6">
+            <div className="space-y-4">
               <div>
-                <h2 className="text-lg font-bold text-white mb-1">Budget & expert match</h2>
-                <p className="text-sm text-slate-400">Set your budget and choose how we match you with a specialist.</p>
+                <h2 className="text-base font-bold text-white mb-0.5">Budget & expert match</h2>
+                <p className="text-xs text-slate-400">Set your budget and choose how we match you with a specialist.</p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">Country</label>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Country</label>
                   <select value={country} onChange={e => setCountry(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 rounded-xl py-2.5 px-4 text-sm text-slate-100 outline-none transition-all appearance-none cursor-pointer">
+                    className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 rounded-xl py-2 px-3 text-sm text-slate-100 outline-none transition-all appearance-none cursor-pointer">
                     {['Ethiopia', 'United States', 'United Kingdom', 'Canada', 'Germany', 'Saudi Arabia', 'Other'].map(c => (
                       <option key={c} value={c}>{c}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">Budget ({curr.currency})</label>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Budget ({curr.currency})</label>
                   <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-bold">{curr.symbol}</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-bold">{curr.symbol}</span>
                     <input type="text" value={budget}
-                      onChange={e => setBudget(e.target.value.replace(/[^0-9]/g, '') || '')}
-                      className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 rounded-xl py-2.5 pl-9 pr-4 text-sm text-slate-100 font-bold outline-none transition-all"
+                      onChange={e => { budgetManuallyEditedRef.current = true; setBudget(e.target.value.replace(/[^0-9]/g, '') || ''); }}
+                      className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 rounded-xl py-2 pl-8 pr-3 text-sm text-slate-100 font-bold outline-none transition-all"
                       placeholder={`Min ${curr.symbol}${Math.ceil(getBasePrice(serviceType, country) * curr.exchangeRate)}`} />
                   </div>
-                  <div className="flex items-center gap-3 mt-1.5 text-xs">
+                  <div className="flex items-center gap-3 mt-1 text-xs">
                     <span className="text-slate-500">Base: <span className="text-amber-400 font-bold">{curr.symbol}{Math.ceil(getBasePrice(serviceType, country) * curr.exchangeRate)}</span></span>
                     {Number(budget) > 0 && <span className="text-slate-500">≈ <span className="text-white font-bold">${Math.round(budgetInUSD)} USD</span></span>}
                   </div>
@@ -548,20 +557,20 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
               </div>
 
               {needsDownpayment ? (
-                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-sm text-amber-400 flex items-center gap-2">
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-2.5 text-xs text-amber-400 flex items-center gap-2">
                   <AlertCircle className="h-4 w-4 shrink-0" />
                   Budget ≥ $100 USD — you'll choose to pay now or upon delivery in the final step.
                 </div>
               ) : Number(budget) > 0 ? (
-                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 text-sm text-emerald-400 flex items-center gap-2">
+                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-2.5 text-xs text-emerald-400 flex items-center gap-2">
                   <Check className="h-4 w-4 shrink-0" />
                   Budget under $100 — no upfront payment required. Pay upon delivery.
                 </div>
               ) : null}
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-2">Expert Preference</label>
-                <div className="grid grid-cols-3 gap-3">
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Expert Preference</label>
+                <div className="grid grid-cols-3 gap-2">
                   {[
                     { val: 'auto', icon: Globe, label: 'Auto-Match', desc: 'Best fit for you' },
                     { val: 'previous', icon: Clock, label: 'Previous', desc: 'Worked before' },
@@ -570,14 +579,14 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
                     const Icon = opt.icon;
                     return (
                       <button key={opt.val} type="button" onClick={() => setExpertPreference(opt.val)}
-                        className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                        className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                           expertPreference === opt.val
                             ? 'border-amber-500 bg-amber-500/10'
                             : 'border-slate-800 bg-slate-900/50 hover:border-slate-700'
                         }`}>
-                        <div className="flex items-center justify-between mb-1">
-                          <Icon className={`h-4 w-4 ${expertPreference === opt.val ? 'text-amber-400' : 'text-slate-500'}`} />
-                          {expertPreference === opt.val && <Check className="h-3.5 w-3.5 text-amber-400" />}
+                        <div className="flex items-center justify-between mb-0.5">
+                          <Icon className={`h-3.5 w-3.5 ${expertPreference === opt.val ? 'text-amber-400' : 'text-slate-500'}`} />
+                          {expertPreference === opt.val && <Check className="h-3 w-3 text-amber-400" />}
                         </div>
                         <h4 className={`text-xs font-bold ${expertPreference === opt.val ? 'text-white' : 'text-slate-300'}`}>{opt.label}</h4>
                         <p className="text-[10px] text-slate-500 mt-0.5">{opt.desc}</p>
@@ -588,7 +597,7 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
                 {expertPreference === 'previous' && (
                   <input type="text" value={previousExpertName} onChange={e => setPreviousExpertName(e.target.value)}
                     placeholder="Expert name or ID"
-                    className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 rounded-xl py-2.5 px-4 text-sm text-slate-100 outline-none transition-all mt-3 placeholder:text-slate-600" />
+                    className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 rounded-xl py-2 px-3 text-sm text-slate-100 outline-none transition-all mt-2 placeholder:text-slate-600" />
                 )}
               </div>
             </div>
@@ -596,10 +605,10 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
 
           {/* ═══ STEP 4: Review ═══ */}
           {step === 4 && (
-            <div className="space-y-6">
+            <div className="space-y-4">
               <div>
-                <h2 className="text-lg font-bold text-white mb-1">Review your order</h2>
-                <p className="text-sm text-slate-400">Double-check everything before proceeding to payment.</p>
+                <h2 className="text-base font-bold text-white mb-0.5">Review your order</h2>
+                <p className="text-xs text-slate-400">Double-check everything before proceeding to payment.</p>
               </div>
 
               <div className="bg-slate-900 border border-slate-800 rounded-xl divide-y divide-slate-800/80">
@@ -612,22 +621,22 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
                   { label: 'Expert', value: getMatchedExpert() },
                   { label: 'File', value: fileName || 'None' },
                 ].map((row, i) => (
-                  <div key={i} className="flex justify-between items-center px-4 py-3">
+                  <div key={i} className="flex justify-between items-center px-3 py-2.5">
                     <span className="text-xs text-slate-500 font-medium">{row.label}</span>
-                    <span className="text-sm text-white font-medium text-right max-w-[60%] truncate">{row.value}</span>
+                    <span className="text-xs text-white font-medium text-right max-w-[60%] truncate">{row.value}</span>
                   </div>
                 ))}
                 {description && (
-                  <div className="px-4 py-3 space-y-1">
+                  <div className="px-3 py-2.5 space-y-0.5">
                     <span className="text-xs text-slate-500 font-medium">Description</span>
-                    <p className="text-sm text-slate-300 leading-relaxed line-clamp-3">{description}</p>
+                    <p className="text-xs text-slate-300 leading-relaxed line-clamp-3">{description}</p>
                   </div>
                 )}
               </div>
 
-              <div className="flex items-start gap-3 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
-                <ShieldCheck className="h-5 w-5 text-emerald-400 shrink-0 mt-0.5" />
-                <p className="text-sm text-slate-300 leading-relaxed">
+              <div className="flex items-start gap-2.5 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-slate-300 leading-relaxed">
                   Your order is confidential. All work goes through quality review before delivery.
                 </p>
               </div>
@@ -636,18 +645,18 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
 
           {/* ═══ STEP 5: Payment ═══ */}
           {step === 5 && (
-            <div className="space-y-6">
+            <div className="space-y-4">
               <div>
-                <h2 className="text-lg font-bold text-white mb-1">How would you like to pay?</h2>
-                <p className="text-sm text-slate-400">Choose when you want to make your payment.</p>
+                <h2 className="text-base font-bold text-white mb-0.5">How would you like to pay?</h2>
+                <p className="text-xs text-slate-400">Choose when you want to make your payment.</p>
               </div>
 
               {/* Pay Later / Pay Now toggle */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2">
                 <button type="button" onClick={() => setPaymentChoice('delivery')}
-                  className={`p-4 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                  className={`p-3.5 rounded-xl border-2 text-left transition-all cursor-pointer ${
                     paymentChoice === 'delivery'
-                      ? 'border-emerald-500 bg-emerald-500/10'
+                      ? 'border-emerald-500 bg-emerald-500/10 shadow-[0_0_12px_rgba(16,185,129,0.15)]'
                       : 'border-slate-800 bg-slate-900/50 hover:border-slate-700'
                   }`}>
                   <div className="flex items-center justify-between mb-2">
@@ -655,13 +664,13 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
                     {paymentChoice === 'delivery' && <div className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center"><Check className="h-3 w-3 text-white" /></div>}
                   </div>
                   <h4 className="text-sm font-bold text-white">Pay Later</h4>
-                  <p className="text-xs text-slate-400 mt-1">Pay after you've seen the completed work.</p>
+                  <p className="text-[11px] text-slate-400 mt-1 leading-snug">Pay after you've reviewed the completed work.</p>
                 </button>
 
                 <button type="button" onClick={() => setPaymentChoice('now')}
-                  className={`p-4 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                  className={`p-3.5 rounded-xl border-2 text-left transition-all cursor-pointer ${
                     paymentChoice === 'now'
-                      ? 'border-amber-500 bg-amber-500/10'
+                      ? 'border-amber-500 bg-amber-500/10 shadow-[0_0_12px_rgba(245,158,11,0.15)]'
                       : 'border-slate-800 bg-slate-900/50 hover:border-slate-700'
                   }`}>
                   <div className="flex items-center justify-between mb-2">
@@ -669,17 +678,17 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
                     {paymentChoice === 'now' && <div className="w-5 h-5 rounded-full bg-amber-500 flex items-center justify-center"><Check className="h-3 w-3 text-[#0F172A]" /></div>}
                   </div>
                   <h4 className="text-sm font-bold text-white">Pay Now</h4>
-                  <p className="text-xs text-slate-400 mt-1">Upfront payment to start immediately.</p>
+                  <p className="text-[11px] text-slate-400 mt-1 leading-snug">Upfront payment to start immediately.</p>
                 </button>
               </div>
 
               {/* ── Pay Now: Ethiopia ── */}
               {paymentChoice === 'now' && country.toLowerCase() === 'ethiopia' && (
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-4">
-                  <p className="text-sm text-slate-300">Transfer <strong className="text-amber-400">{curr.symbol}{Number(budget).toLocaleString()} {curr.currency}</strong> to:</p>
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 space-y-3">
+                  <p className="text-xs text-slate-300">Transfer <strong className="text-amber-400">{curr.symbol}{Number(budget).toLocaleString()} {curr.currency}</strong> to:</p>
 
                   {/* Method tabs */}
-                  <div className="flex gap-2">
+                  <div className="flex gap-1.5">
                     {([
                       { key: 'cbe', label: 'CBE', sub: 'Bank' },
                       { key: 'telebirr', label: 'Telebirr', sub: 'Mobile' },
@@ -688,112 +697,113 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
                       { key: 'card', label: 'Card', sub: 'Visa/MC' },
                     ] as const).map(m => (
                       <button key={m.key} type="button" onClick={() => setEthiopiaMethod(m.key)}
-                        className={`flex-1 py-2 px-1 rounded-lg border text-center transition-all cursor-pointer ${
+                        className={`flex-1 py-2 px-1 rounded-lg border text-center transition-all cursor-pointer min-h-[40px] ${
                           ethiopiaMethod === m.key
                             ? 'border-amber-500 bg-amber-500/10 text-white'
                             : 'border-slate-800 bg-slate-950/50 text-slate-500 hover:border-slate-700'
                         }`}>
-                        <span className="block text-[11px] font-bold">{m.label}</span>
-                        <span className="block text-[9px] opacity-60">{m.sub}</span>
+                        <span className="block text-[10px] font-bold">{m.label}</span>
+                        <span className="block text-[8px] opacity-60">{m.sub}</span>
                       </button>
                     ))}
                   </div>
 
                   {/* Account details */}
-                  <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 font-mono text-xs space-y-1">
+                  <div className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 font-mono text-[11px] space-y-0.5">
                     {ethiopiaMethod === 'cbe' && paymentConfig?.ethiopia?.cbe && (
                       <>
                         <p className="font-bold text-slate-300">{paymentConfig.ethiopia.cbe.accountName}</p>
-                        <p className="text-amber-400 font-bold select-all text-sm">{paymentConfig.ethiopia.cbe.accountNumber}</p>
+                        <p className="text-amber-400 font-bold select-all text-xs">{paymentConfig.ethiopia.cbe.accountNumber}</p>
                       </>
                     )}
                     {ethiopiaMethod === 'telebirr' && paymentConfig?.ethiopia?.telebirr && (
                       <>
                         <p className="font-bold text-slate-300">{paymentConfig.ethiopia.telebirr.name}</p>
-                        <p className="text-amber-400 font-bold select-all text-sm">{paymentConfig.ethiopia.telebirr.number}</p>
+                        <p className="text-amber-400 font-bold select-all text-xs">{paymentConfig.ethiopia.telebirr.number}</p>
                       </>
                     )}
                     {ethiopiaMethod === 'boa' && paymentConfig?.ethiopia?.boa && (
                       <>
                         <p className="font-bold text-slate-300">{paymentConfig.ethiopia.boa.accountName}</p>
-                        <p className="text-amber-400 font-bold select-all text-sm">{paymentConfig.ethiopia.boa.accountNumber}</p>
+                        <p className="text-amber-400 font-bold select-all text-xs">{paymentConfig.ethiopia.boa.accountNumber}</p>
                       </>
                     )}
                     {ethiopiaMethod === 'crypto' && paymentConfig?.crypto?.assets?.map((asset: any) =>
                       asset.networks.map((network: any) => (
                         <div key={`${asset.id}-${network.name}`}>
                           <p className="font-bold text-slate-300">{asset.name} — {network.name}</p>
-                          <p className="text-amber-400 font-bold select-all text-[11px]">{network.address}</p>
+                          <p className="text-amber-400 font-bold select-all text-[10px]">{network.address}</p>
                         </div>
                       ))
                     )}
                     {ethiopiaMethod === 'card' && paymentConfig?.card && (
                       <>
                         <p className="font-bold text-slate-300">{paymentConfig.card.holderName}</p>
-                        <p className="text-amber-400 font-bold select-all text-sm tracking-wider">{paymentConfig.card.cardNumber}</p>
+                        <p className="text-amber-400 font-bold select-all text-xs tracking-wider">{paymentConfig.card.cardNumber}</p>
                       </>
                     )}
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">Transaction Reference</label>
-                    <input type="text" value={ethiopiaTxRef} onChange={e => setEthiopiaTxRef(e.target.value)}
-                      placeholder="e.g. TXN918237198"
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg py-2.5 px-3 text-sm text-slate-100 font-mono outline-none transition-all placeholder:text-slate-600" />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">Payment Screenshot</label>
-                    <label className="flex items-center justify-center bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-amber-500 rounded-lg py-3 px-4 text-sm text-slate-300 cursor-pointer transition-all">
-                      <Upload className="h-4 w-4 text-amber-500 mr-2" />
-                      <span>{paymentScreenshotName || 'Upload receipt'}</span>
-                      <input type="file" accept="image/*" className="hidden" onChange={async e => {
-                        if (e.target.files?.[0]) {
-                          const f = e.target.files[0]; setPaymentScreenshotName(f.name);
-                          try { const c = await compressImage(f); setPaymentScreenshot(c); } catch { const r = new FileReader(); r.onloadend = () => setPaymentScreenshot(r.result as string); r.readAsDataURL(f); }
-                        }
-                      }} />
-                    </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-300 mb-1">Transaction Reference</label>
+                      <input type="text" value={ethiopiaTxRef} onChange={e => setEthiopiaTxRef(e.target.value)}
+                        placeholder="e.g. TXN918237198"
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg py-2 px-2.5 text-xs text-slate-100 font-mono outline-none transition-all placeholder:text-slate-600" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-300 mb-1">Payment Screenshot</label>
+                      <label className="flex items-center justify-center bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-amber-500 rounded-lg py-2 px-2.5 text-xs text-slate-300 cursor-pointer transition-all">
+                        <Upload className="h-3.5 w-3.5 text-amber-500 mr-1.5" />
+                        <span className="truncate">{paymentScreenshotName || 'Upload receipt'}</span>
+                        <input type="file" accept="image/*" className="hidden" onChange={async e => {
+                          if (e.target.files?.[0]) {
+                            const f = e.target.files[0]; setPaymentScreenshotName(f.name);
+                            try { const c = await compressImage(f); setPaymentScreenshot(c); } catch { const r = new FileReader(); r.onloadend = () => setPaymentScreenshot(r.result as string); r.readAsDataURL(f); }
+                          }
+                        }} />
+                      </label>
+                    </div>
                   </div>
                 </div>
               )}
 
               {/* ── Pay Now: International ── */}
               {paymentChoice === 'now' && country.toLowerCase() !== 'ethiopia' && (
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-4">
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 space-y-3">
                   {/* Method tabs */}
                   <div className="flex gap-2">
                     <button type="button" onClick={() => setInternationalMethod('crypto')}
-                      className={`flex-1 py-2.5 rounded-lg border text-center transition-all cursor-pointer ${
+                      className={`flex-1 py-2 rounded-lg border text-center transition-all cursor-pointer ${
                         internationalMethod === 'crypto'
                           ? 'border-amber-500 bg-amber-500/10 text-white'
                           : 'border-slate-800 bg-slate-950/50 text-slate-500 hover:border-slate-700'
                       }`}>
-                      <span className="block text-xs font-bold">Crypto</span>
-                      <span className="block text-[10px] opacity-60">-{paymentConfig?.crypto?.discountPercent || 5}% off</span>
+                      <span className="block text-[11px] font-bold">Crypto</span>
+                      <span className="block text-[9px] opacity-60">-{paymentConfig?.crypto?.discountPercent || 5}% off</span>
                     </button>
                     <button type="button" onClick={() => setInternationalMethod('card')}
-                      className={`flex-1 py-2.5 rounded-lg border text-center transition-all cursor-pointer ${
+                      className={`flex-1 py-2 rounded-lg border text-center transition-all cursor-pointer ${
                         internationalMethod === 'card'
                           ? 'border-amber-500 bg-amber-500/10 text-white'
                           : 'border-slate-800 bg-slate-950/50 text-slate-500 hover:border-slate-700'
                       }`}>
-                      <span className="block text-xs font-bold">Card</span>
-                      <span className="block text-[10px] opacity-60">Visa / Mastercard</span>
+                      <span className="block text-[11px] font-bold">Card</span>
+                      <span className="block text-[9px] opacity-60">Visa / Mastercard</span>
                     </button>
                   </div>
 
                   {internationalMethod === 'crypto' && (
-                    <div className="space-y-3">
-                      <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 text-sm text-emerald-400 font-bold">
-                        ${((Number(budget) || 100) / curr.exchangeRate * (1 - (paymentConfig?.crypto?.discountPercent || 5) / 100)).toFixed(2)} USD <span className="text-xs font-normal opacity-70">after {paymentConfig?.crypto?.discountPercent || 5}% crypto discount</span>
+                    <div className="space-y-2">
+                      <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2 text-xs text-emerald-400 font-bold">
+                        ${((Number(budget) || 100) / curr.exchangeRate * (1 - (paymentConfig?.crypto?.discountPercent || 5) / 100)).toFixed(2)} USD <span className="text-[10px] font-normal opacity-70">after {paymentConfig?.crypto?.discountPercent || 5}% crypto discount</span>
                       </div>
-                      <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 font-mono text-xs space-y-2">
+                      <div className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 font-mono text-[11px] space-y-1.5">
                         {paymentConfig?.crypto?.assets?.map((asset: any) =>
                           asset.networks.map((network: any) => (
                             <div key={`${asset.id}-${network.name}`}>
                               <p className="font-bold text-slate-300">{asset.name} — {network.name}</p>
-                              <p className="text-amber-400 font-bold select-all text-[11px]">{network.address}</p>
+                              <p className="text-amber-400 font-bold select-all text-[10px]">{network.address}</p>
                             </div>
                           ))
                         )}
@@ -802,32 +812,33 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
                   )}
 
                   {internationalMethod === 'card' && paymentConfig?.card && (
-                    <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 font-mono text-xs space-y-1">
-                      <p className="text-slate-500 text-[10px] uppercase">Transfer to this card</p>
+                    <div className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 font-mono text-[11px] space-y-0.5">
+                      <p className="text-slate-500 text-[9px] uppercase">Transfer to this card</p>
                       <p className="font-bold text-slate-300">{paymentConfig.card.holderName}</p>
-                      <p className="text-amber-400 font-bold select-all text-sm tracking-wider">{paymentConfig.card.cardNumber}</p>
+                      <p className="text-amber-400 font-bold select-all text-xs tracking-wider">{paymentConfig.card.cardNumber}</p>
                     </div>
                   )}
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">Transaction Reference</label>
-                    <input type="text" value={ethiopiaTxRef} onChange={e => setEthiopiaTxRef(e.target.value)}
-                      placeholder="e.g. hash or reference"
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg py-2.5 px-3 text-sm text-slate-100 font-mono outline-none transition-all placeholder:text-slate-600" />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">Payment Screenshot</label>
-                    <label className="flex items-center justify-center bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-amber-500 rounded-lg py-3 px-4 text-sm text-slate-300 cursor-pointer transition-all">
-                      <Upload className="h-4 w-4 text-amber-500 mr-2" />
-                      <span>{paymentScreenshotName || 'Upload receipt'}</span>
-                      <input type="file" accept="image/*" className="hidden" onChange={async e => {
-                        if (e.target.files?.[0]) {
-                          const f = e.target.files[0]; setPaymentScreenshotName(f.name);
-                          try { const c = await compressImage(f); setPaymentScreenshot(c); } catch { const r = new FileReader(); r.onloadend = () => setPaymentScreenshot(r.result as string); r.readAsDataURL(f); }
-                        }
-                      }} />
-                    </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-300 mb-1">Transaction Reference</label>
+                      <input type="text" value={ethiopiaTxRef} onChange={e => setEthiopiaTxRef(e.target.value)}
+                        placeholder="e.g. hash or reference"
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg py-2 px-2.5 text-xs text-slate-100 font-mono outline-none transition-all placeholder:text-slate-600" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-300 mb-1">Payment Screenshot</label>
+                      <label className="flex items-center justify-center bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-amber-500 rounded-lg py-2 px-2.5 text-xs text-slate-300 cursor-pointer transition-all">
+                        <Upload className="h-3.5 w-3.5 text-amber-500 mr-1.5" />
+                        <span className="truncate">{paymentScreenshotName || 'Upload receipt'}</span>
+                        <input type="file" accept="image/*" className="hidden" onChange={async e => {
+                          if (e.target.files?.[0]) {
+                            const f = e.target.files[0]; setPaymentScreenshotName(f.name);
+                            try { const c = await compressImage(f); setPaymentScreenshot(c); } catch { const r = new FileReader(); r.onloadend = () => setPaymentScreenshot(r.result as string); r.readAsDataURL(f); }
+                          }
+                        }} />
+                      </label>
+                    </div>
                   </div>
                 </div>
               )}
@@ -838,27 +849,27 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
       </div>
 
       {/* ── Bottom Bar ── */}
-      <div className="shrink-0 border-t border-slate-800/80 bg-[#0F172A] px-4 sm:px-6 py-3">
+      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-800/80 bg-[#0F172A] px-4 sm:px-6 py-2.5 shadow-[0_-4px_20px_rgba(0,0,0,0.3)]">
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
           {step > 1 ? (
             <button type="button" onClick={handleBack}
-              className="flex items-center gap-1.5 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 font-semibold py-2.5 px-5 rounded-xl text-sm transition-all cursor-pointer">
-              <ChevronLeft className="h-4 w-4" /> Back
+              className="flex items-center gap-1.5 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 font-semibold py-2 px-4 rounded-xl text-xs transition-all cursor-pointer">
+              <ChevronLeft className="h-3.5 w-3.5" /> Back
             </button>
           ) : <div />}
 
           {step < 5 ? (
             <button type="button" onClick={handleNext} disabled={!canProceed()}
-              className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/30 disabled:cursor-not-allowed text-[#0F172A] font-bold py-2.5 px-6 rounded-xl text-sm transition-all cursor-pointer">
-              Next <ChevronRight className="h-4 w-4" />
+              className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/30 disabled:cursor-not-allowed text-[#0F172A] font-bold py-2 px-5 rounded-xl text-xs transition-all cursor-pointer">
+              Next <ChevronRight className="h-3.5 w-3.5" />
             </button>
           ) : (
             <button type="button" onClick={handleSubmit} disabled={isSubmitting || !paymentChoice}
-              className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/30 disabled:cursor-not-allowed text-[#0F172A] font-bold py-2.5 px-6 rounded-xl text-sm transition-all cursor-pointer">
+              className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/30 disabled:cursor-not-allowed text-[#0F172A] font-bold py-2 px-5 rounded-xl text-xs transition-all cursor-pointer">
               {isSubmitting ? (
-                <><span className="animate-spin h-4 w-4 border-2 border-[#0F172A] border-t-transparent rounded-full" /> Submitting...</>
+                <><span className="animate-spin h-3.5 w-3.5 border-2 border-[#0F172A] border-t-transparent rounded-full" /> Submitting...</>
               ) : (
-                <><ShieldCheck className="h-4 w-4" /> {paymentChoice === 'delivery' ? 'Place Order' : 'Submit & Pay'}</>
+                <><ShieldCheck className="h-3.5 w-3.5" /> {paymentChoice === 'delivery' ? 'Place Order' : 'Submit & Pay'}</>
               )}
             </button>
           )}

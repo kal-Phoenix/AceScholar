@@ -33,17 +33,21 @@ export default function Contact() {
   };
 
   return (
-    <div className="bg-[#0F172A] text-slate-100 min-h-[90vh] font-sans px-4 sm:px-6 lg:px-8 py-8 sm:py-12" id="contact-container">
-      <div className="max-w-6xl mx-auto space-y-8">
-
-        {/* Header */}
-        <div className="text-center space-y-3">
-          <span className="text-amber-500 text-[10px] sm:text-xs font-bold tracking-widest uppercase">Get in Touch</span>
-          <h1 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight">Contact Our Coordinators</h1>
-          <p className="text-slate-400 text-xs sm:text-sm max-w-xl mx-auto">
+    <div className="bg-[#0F172A] text-slate-100 font-sans" id="contact-container">
+      {/* Page Header */}
+      <header className="relative bg-gradient-to-b from-[#0F172A] to-[#1E293B] py-10 sm:py-16 md:py-20 px-4 text-center border-b border-slate-800">
+        <div className="absolute inset-0 opacity-5 pointer-events-none bg-[radial-gradient(#f59e0b_1px,transparent_1px)] [background-size:16px_16px]"></div>
+        <div className="max-w-4xl mx-auto space-y-3 sm:space-y-4">
+          <span className="text-amber-500 text-[10px] sm:text-xs font-bold tracking-widest uppercase">We&apos;re Here to Help</span>
+          <h1 className="text-2xl sm:text-4xl md:text-5xl font-bold tracking-tight text-white">Contact Us</h1>
+          <div className="h-1 w-16 bg-amber-500 mx-auto rounded"></div>
+          <p className="text-xs sm:text-lg text-slate-300 max-w-2xl mx-auto font-light leading-relaxed">
             Have questions about pricing, academic criteria, or custom bulk orders? Reach our coordinating desk directly.
           </p>
         </div>
+      </header>
+
+      <div className="max-w-6xl mx-auto space-y-8 px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
 
         {/* Contact Form Card */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden">

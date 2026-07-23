@@ -380,29 +380,35 @@ export default function App() {
     }
   };
 
+  const isFullscreenPage = currentPage === 'order';
+
   return (
     <ErrorBoundary>
     <div className="min-h-screen bg-[#0F172A] flex flex-col font-sans" id="app-root">
       
       {/* 1. STICKY BRANDED HEADER/NAVBAR */}
-      <Navbar
-        currentPage={currentPage}
-        setCurrentPage={handleSetPage}
-        user={user}
-        onLogout={handleLogout}
-        detectedLocation={detectedLocation}
-      />
+      {!isFullscreenPage && (
+        <Navbar
+          currentPage={currentPage}
+          setCurrentPage={handleSetPage}
+          user={user}
+          onLogout={handleLogout}
+          detectedLocation={detectedLocation}
+        />
+      )}
 
       {/* 2. MAIN SCROLLABLE CONTENT BODY */}
-      <main className="flex-grow animate-fade-in" key={currentPage}>
+      <main className={`${isFullscreenPage ? '' : 'flex-grow'} animate-fade-in`} key={currentPage}>
         {renderActivePage()}
       </main>
 
       {/* 3. SHARED FOOTER AREA */}
-      <Footer setCurrentPage={handleSetPage} />
+      {!isFullscreenPage && (
+        <Footer setCurrentPage={handleSetPage} />
+      )}
 
       {/* 4. GLOBAL FLOATING SUPPORT CHANNEL */}
-      <WhatsAppButton />
+      {!isFullscreenPage && <WhatsAppButton />}
 
       {/* 5. GORGEOUS CUSTOM SLATE FLOATING TOASTS */}
       {toast && (

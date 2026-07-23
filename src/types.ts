@@ -15,6 +15,8 @@ export interface Profile {
   expert_signup_at?: string;
   expert_documents?: Array<{ name: string; size?: number; type?: string; content?: string }>;
   expert_status?: 'pending' | 'approved' | 'rejected';
+  access_token?: string | null;
+  refresh_token?: string | null;
 }
 
 export interface OrderApplicant {
@@ -52,7 +54,6 @@ export interface Order {
   payment_id?: string;
   total_amount?: number;
   currency?: string;
-  items?: any[];
   applicants?: OrderApplicant[];
   // Payment-after-delivery lifecycle
   agreed_price?: number;

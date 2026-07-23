@@ -92,7 +92,7 @@ export default function ResetPassword({ setCurrentPage, showToast }: ResetPasswo
 
   return (
     <div className="bg-[#0F172A] text-slate-100 min-h-[85vh] flex items-center justify-center font-sans px-4">
-      <div className="max-w-md w-full space-y-6">
+        <div className="max-w-md w-full space-y-6 animate-fade-in-up">
         <div className="text-center space-y-2">
           <div className="h-14 w-14 rounded-2xl bg-amber-500/10 flex items-center justify-center mx-auto border border-amber-500/20">
             <GraduationCap className="h-7 w-7 text-amber-500" />

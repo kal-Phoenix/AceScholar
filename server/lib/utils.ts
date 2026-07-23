@@ -81,7 +81,7 @@ export async function getRequesterProfile(req: Request): Promise<{
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.slice(7);
     if (token) {
-      const { supabase } = await import('./lib/supabase.js');
+      const { supabase } = await import('./supabase.js');
       const { data: { user: authUser }, error } = await supabase.auth.getUser(token);
       if (error || !authUser) return null;
       const email = authUser.email?.toLowerCase().trim();

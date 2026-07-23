@@ -64,6 +64,33 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
+// PATCH toggle read status (admin only)
+router.patch('/:messageId', async (req: Request, res: Response) => {
+  try {
+    const requester = await getRequesterProfile(req);
+    if (!requester || requester.role !== 'admin') {
+      return res.status(403).json({ error: 'Unauthorized. Admin credentials required.' });
+    }
+
+    const messageId = req.params.messageId;
+    if (!messageId) return res.status(400).json({ error: 'Message ID is required' });
+
+    const { is_read } = req.body;
+    if (typeof is_read !== 'boolean') {
+      return res.status(400).json({ error: 'is_read must be a boolean' });
+    }
+
+    const { data, error } = await db
+      .from('contact_messages').update({ is_read }).eq('id', messageId).select().maybeSingle();
+    if (error) return res.status(500).json({ error: 'Failed to update contact message' });
+    if (!data) return res.status(404).json({ error: 'Message not found' });
+
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error while updating contact message' });
+  }
+});
+
 // DELETE contact message (admin only)
 router.delete('/:messageId', async (req: Request, res: Response) => {
   try {

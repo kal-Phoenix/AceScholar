@@ -173,7 +173,7 @@ a {
 /* ── Glow button effect ────────────────────────────────────────────────────── */
 .glow-btn {
   position: relative;
-  overflow: hidden;
+  z-index: 1;
 }
 .glow-btn::before {
   content: '';
@@ -189,14 +189,6 @@ a {
 }
 .glow-btn:hover::before {
   opacity: 1;
-}
-.glow-btn::after {
-  content: '';
-  position: absolute;
-  inset: 1px;
-  background: inherit;
-  border-radius: inherit;
-  z-index: -1;
 }
 
 /* ── Floating animation ────────────────────────────────────────────────────── */
