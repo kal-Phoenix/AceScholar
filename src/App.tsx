@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { PageType, Profile } from './types';
+import { supabase } from './lib/supabase';
 import Navbar from './components/Navbar';
 import Home from './components/Home';
 import Services from './components/Services';
@@ -28,9 +29,24 @@ export default function App() {
   // Persistence of active session
   const [user, setUser] = useState<Profile | null>(() => {
     if (typeof window === 'undefined') return null;
-    const stored = localStorage.getItem('ace_scholar_current_user');
-    return stored ? JSON.parse(stored) : null;
+    try {
+      const stored = localStorage.getItem('ace_scholar_current_user');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      localStorage.removeItem('ace_scholar_current_user');
+      return null;
+    }
   });
+
+  // Restore Supabase client session from localStorage on page load for token refresh
+  useEffect(() => {
+    if (supabase && user?.access_token && user?.refresh_token) {
+      supabase.auth.setSession({
+        access_token: user.access_token,
+        refresh_token: user.refresh_token,
+      }).catch(() => {});
+    }
+  }, []);
 
   // Toast State
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -378,7 +394,7 @@ export default function App() {
       />
 
       {/* 2. MAIN SCROLLABLE CONTENT BODY */}
-      <main className="flex-grow">
+      <main className="flex-grow animate-fade-in" key={currentPage}>
         {renderActivePage()}
       </main>
 
@@ -391,7 +407,7 @@ export default function App() {
       {/* 5. GORGEOUS CUSTOM SLATE FLOATING TOASTS */}
       {toast && (
         <div
-          className={`fixed bottom-6 left-6 z-50 p-4 rounded-xl border shadow-2xl flex items-center gap-3 animate-slide-in max-w-sm ${
+          className={`fixed bottom-6 left-6 z-50 p-4 rounded-xl border shadow-2xl flex items-center gap-3 animate-slide-in-left max-w-sm ${
             toast.type === 'success'
               ? 'bg-slate-900 border-emerald-500/30 text-emerald-400'
               : 'bg-slate-900 border-rose-500/30 text-rose-400'

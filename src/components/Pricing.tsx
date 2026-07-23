@@ -163,12 +163,13 @@ export default function Pricing({ setCurrentPage, setSelectedServiceType, showTo
     <div className="bg-[#0F172A] font-sans text-slate-100" id="pricing-page-container">
       
       {/* 1. PAGE HEADER */}
-      <header className="relative bg-gradient-to-b from-[#0F172A] to-[#1E293B] py-10 sm:py-16 md:py-20 px-4 text-center border-b border-slate-800">
-        <div className="absolute inset-0 opacity-5 pointer-events-none bg-[radial-gradient(#f59e0b_1px,transparent_1px)] [background-size:16px_16px]"></div>
-        <div className="max-w-4xl mx-auto space-y-3 sm:space-y-4">
+      <header className="relative overflow-hidden bg-gradient-to-b from-[#0F172A] via-[#1a1f3a] to-[#0F172A] py-12 sm:py-18 md:py-24 px-4 text-center border-b border-slate-800/40">
+        <div className="absolute inset-0 opacity-[0.04] pointer-events-none bg-[radial-gradient(#f59e0b_1px,transparent_1px)] [background-size:20px_20px]"></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-amber-500/6 rounded-full filter blur-[120px] pointer-events-none"></div>
+        <div className="relative max-w-4xl mx-auto space-y-4 sm:space-y-5">
           <span className="text-amber-500 text-[10px] sm:text-xs font-bold tracking-widest uppercase">Honest Rates &bull; No Hidden Fees</span>
-          <h1 className="text-2xl sm:text-4xl md:text-5xl font-bold tracking-tight text-white">Simple, Transparent Pricing</h1>
-          <div className="h-1 w-16 bg-amber-500 mx-auto rounded"></div>
+          <h1 className="text-3xl sm:text-4xl md:text-6xl font-extrabold tracking-tight text-white">Simple, Transparent Pricing</h1>
+          <div className="h-1 w-20 bg-gradient-to-r from-amber-500 to-amber-600 mx-auto rounded-full"></div>
           <p className="text-xs sm:text-lg text-slate-300 max-w-2xl mx-auto font-light leading-relaxed">
             No subscription requirements or surprise charges. Pay only for the depth and speed of the service you actively select.
           </p>
@@ -177,7 +178,7 @@ export default function Pricing({ setCurrentPage, setSelectedServiceType, showTo
  
       {/* TABS SWAPPER */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 sm:pt-16">
-        <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 border-b border-slate-800 pb-3 sm:pb-4">
+        <div className="flex overflow-x-auto items-center justify-start sm:justify-center gap-1.5 sm:gap-2 border-b border-slate-800 pb-3 sm:pb-4 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-hide">
           {(Object.keys(pricingCategories) as Array<keyof typeof pricingCategories>).map((key) => (
             <button
               key={key}
@@ -195,39 +196,57 @@ export default function Pricing({ setCurrentPage, setSelectedServiceType, showTo
       </section>
  
       {/* 2. PRICING TABLES */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-12">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-8">
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-14">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-8">
           {pricingCategories[activeCategory].tiers.map((tier, idx) => (
             <div
               key={idx}
-              className="relative bg-slate-900/60 border border-slate-800 hover:border-slate-700 rounded-2xl p-5 sm:p-8 flex flex-col justify-between transition-all duration-300"
+              className={`relative rounded-2xl sm:rounded-3xl p-6 sm:p-8 flex flex-col justify-between transition-all duration-500 card-hover overflow-hidden ${
+                idx === 1
+                  ? 'border-2 border-amber-500/40 bg-gradient-to-b from-amber-500/10 via-slate-900/60 to-slate-900/60 shadow-xl shadow-amber-500/10 scale-[1.02]'
+                  : 'border border-slate-800/60 bg-slate-900/30 hover:border-slate-700/60'
+              }`}
             >
-              <div className="space-y-4 sm:space-y-6">
-                
+              {/* Popular badge for middle tier */}
+              {idx === 1 && (
+                <div className="absolute -top-0 left-1/2 -translate-x-1/2">
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-amber-500/20 rounded-full blur-[4px]" />
+                    <div className="relative px-5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 rounded-b-xl">
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-white/80 animate-pulse" />
+                        <span className="text-[10px] font-bold text-[#0F172A] uppercase tracking-wider">Most Popular</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              <div className="relative space-y-5 sm:space-y-7">
                 {/* Title */}
                 <div>
-                  <h3 className="text-base sm:text-lg font-bold text-white">{tier.name}</h3>
-                  <p className="text-[10px] sm:text-xs text-slate-400 mt-1">{tier.desc}</p>
+                  <h3 className="text-lg sm:text-xl font-bold text-white">{tier.name}</h3>
+                  <p className="text-[10px] sm:text-xs text-slate-400 mt-1.5">{tier.desc}</p>
                 </div>
  
                 {/* Price Display */}
                 <div className="flex items-baseline text-white">
-                  <span className="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight text-amber-400">
+                  <span className={`text-3xl sm:text-4xl md:text-5xl font-black tracking-tight ${idx === 1 ? 'text-amber-400' : 'text-amber-500'}`}>
                     {formatPriceRange(tier.range)}
                   </span>
                 </div>
  
                 {/* Delivery details */}
-                <div className="flex items-center space-x-1.5 text-[10px] sm:text-xs font-semibold text-amber-500 uppercase bg-amber-500/5 border border-amber-500/10 py-1 sm:py-1.5 px-2.5 sm:px-3 rounded-lg w-fit">
+                <div className="flex items-center space-x-1.5 text-[10px] sm:text-xs font-semibold text-amber-500 uppercase bg-amber-500/5 border border-amber-500/10 py-1.5 px-3 rounded-lg w-fit">
                   <Clock className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0" />
                   <span>{tier.delivery}</span>
                 </div>
  
                 {/* Bullets */}
-                <ul className="space-y-2 sm:space-y-3 pt-4 sm:pt-6 border-t border-slate-800/80">
+                <ul className="space-y-2.5 sm:space-y-3.5 pt-5 sm:pt-7 border-t border-slate-800/60">
                   {tier.bullets.map((bullet, bIdx) => (
                     <li key={bIdx} className="flex items-start text-xs sm:text-sm text-slate-300">
-                      <Check className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-500 mr-1.5 sm:mr-2 shrink-0 mt-0.5" />
+                      <Check className={`h-4 w-4 sm:h-[18px] sm:w-[18px] mr-2 sm:mr-2.5 shrink-0 mt-0.5 ${idx === 1 ? 'text-amber-500' : 'text-emerald-500'}`} />
                       <span>{bullet}</span>
                     </li>
                   ))}
@@ -236,12 +255,16 @@ export default function Pricing({ setCurrentPage, setSelectedServiceType, showTo
               </div>
  
               {/* Action Button */}
-              <div className="pt-6 sm:pt-8">
+              <div className="relative pt-7 sm:pt-9">
                 <button
                   onClick={() => handleOrderRedirect(pricingCategories[activeCategory].serviceName)}
-                  className="w-full font-bold py-2.5 sm:py-3 px-4 rounded-xl transition-all duration-200 cursor-pointer text-xs sm:text-sm flex items-center justify-center space-x-1.5 sm:space-x-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700/60"
+                  className={`w-full font-bold py-3 sm:py-3.5 px-5 rounded-xl sm:rounded-2xl transition-all duration-300 cursor-pointer text-xs sm:text-sm flex items-center justify-center space-x-2 ${
+                    idx === 1
+                      ? 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-[#0F172A] shadow-lg shadow-amber-500/20 hover:shadow-amber-500/40'
+                      : 'bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-700/40 hover:border-slate-600'
+                  }`}
                 >
-                  <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  <FileText className="h-4 w-4" />
                   <span>Order {tier.name} Tier</span>
                 </button>
               </div>

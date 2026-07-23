@@ -14,22 +14,22 @@ export default function About({ setCurrentPage }: AboutProps) {
   const features = [
     {
       icon: <Zap className="h-6 w-6 text-amber-500" />,
-      title: '⚡ Fast Delivery',
+      title: 'Fast Delivery',
       desc: '48-hour average turnaround time on most complex projects and dissertation chapters.'
     },
     {
       icon: <ShieldCheck className="h-6 w-6 text-amber-500" />,
-      title: '🔒 100% Confidential',
+      title: '100% Confidential',
       desc: 'Your identity, institution, payments, and work files are protected under military-grade encryption.'
     },
     {
       icon: <Award className="h-6 w-6 text-[#F59E0B]" />,
-      title: '✅ Expert Team',
+      title: 'Expert Team',
       desc: 'Top-tier graduates, researchers, and professional coders matching your specific academic subject area.'
     },
     {
       icon: <RotateCcw className="h-6 w-6 text-amber-500" />,
-      title: '🔄 Free Revisions',
+      title: 'Free Revisions',
       desc: 'Not completely satisfied? We provide unlimited free revisions for 14 days until your criteria are met.'
     }
   ];
@@ -56,12 +56,13 @@ export default function About({ setCurrentPage }: AboutProps) {
     <div className="bg-[#0F172A] font-sans text-slate-100 min-h-screen" id="about-page-container">
       
       {/* 1. PAGE HEADER */}
-      <header className="relative bg-gradient-to-b from-[#0F172A] to-[#1E293B] py-10 sm:py-16 md:py-20 px-4 text-center border-b border-slate-800">
-        <div className="absolute inset-0 opacity-5 pointer-events-none bg-[radial-gradient(#f59e0b_1px,transparent_1px)] [background-size:16px_16px]"></div>
-        <div className="max-w-4xl mx-auto space-y-3 sm:space-y-4">
+      <header className="relative overflow-hidden bg-gradient-to-b from-[#0F172A] via-[#1a1f3a] to-[#0F172A] py-12 sm:py-18 md:py-24 px-4 text-center border-b border-slate-800/40">
+        <div className="absolute inset-0 opacity-[0.04] pointer-events-none bg-[radial-gradient(#f59e0b_1px,transparent_1px)] [background-size:20px_20px]"></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-amber-500/6 rounded-full filter blur-[120px] pointer-events-none"></div>
+        <div className="relative max-w-4xl mx-auto space-y-4 sm:space-y-5">
           <span className="text-amber-500 text-[10px] sm:text-xs font-bold tracking-widest uppercase">Our Mission & Identity</span>
-          <h1 className="text-2xl sm:text-4xl md:text-5xl font-bold tracking-tight text-white">About Us</h1>
-          <div className="h-1 w-16 bg-amber-500 mx-auto rounded"></div>
+          <h1 className="text-3xl sm:text-4xl md:text-6xl font-extrabold tracking-tight text-white">About Us</h1>
+          <div className="h-1 w-20 bg-gradient-to-r from-amber-500 to-amber-600 mx-auto rounded-full"></div>
           <p className="text-xs sm:text-lg text-slate-300 max-w-2xl mx-auto font-light leading-relaxed">
             A tight-knit consortium of premium postgraduate graduates dedicated to your global academic and technical project success.
           </p>
@@ -128,25 +129,27 @@ export default function About({ setCurrentPage }: AboutProps) {
       </section>
  
       {/* 3. WHY CHOOSE US */}
-      <section className="bg-slate-950/40 border-y border-slate-900 py-10 sm:py-20">
+      <section className="bg-gradient-to-b from-slate-950/60 via-[#0F172A] to-slate-950/60 border-y border-slate-800/40 py-12 sm:py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center space-y-2 sm:space-y-3 mb-8 sm:mb-14">
-            <h2 className="text-xl sm:text-3xl font-bold text-white">Why Choose Us</h2>
-            <div className="h-1 w-16 bg-amber-500 mx-auto rounded"></div>
+          <div className="text-center space-y-3 sm:space-y-4 mb-10 sm:mb-16">
+            <span className="text-amber-500 text-[10px] sm:text-xs font-bold tracking-widest uppercase">Why Us</span>
+            <h2 className="text-2xl sm:text-3xl md:text-5xl font-extrabold text-white">Why Choose Us</h2>
+            <div className="h-1 w-20 bg-gradient-to-r from-amber-500 to-amber-600 mx-auto rounded-full"></div>
             <p className="text-slate-400 text-xs sm:text-sm">Four unbending pillars that define our service standards.</p>
           </div>
  
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-8 stagger-children">
             {features.map((feat, idx) => (
               <div 
                 key={idx}
-                className="bg-slate-900/40 border border-slate-800/60 p-5 sm:p-6 rounded-xl hover:border-amber-500/30 transition-all duration-300"
+                className="group relative bg-slate-900/30 border border-slate-800/60 hover:border-amber-500/30 p-6 sm:p-7 rounded-2xl sm:rounded-3xl transition-all duration-500 card-hover overflow-hidden"
               >
-                <div className="bg-amber-500/10 p-2.5 sm:p-3 rounded-lg w-fit mb-3 sm:mb-4">
+                <div className="absolute inset-0 bg-gradient-to-b from-amber-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-2xl sm:rounded-3xl"></div>
+                <div className="relative bg-gradient-to-br from-amber-500/15 to-amber-600/5 p-3 sm:p-3.5 rounded-xl sm:rounded-2xl w-fit mb-4 sm:mb-5 border border-amber-500/10">
                   {feat.icon}
                 </div>
-                <h3 className="font-bold text-sm sm:text-base text-white mb-1.5 sm:mb-2">{feat.title}</h3>
-                <p className="text-[11px] sm:text-xs text-slate-400 leading-relaxed">{feat.desc}</p>
+                <h3 className="relative font-bold text-sm sm:text-lg text-white mb-2 sm:mb-3">{feat.title}</h3>
+                <p className="relative text-[11px] sm:text-xs text-slate-400 leading-relaxed">{feat.desc}</p>
               </div>
             ))}
           </div>
@@ -161,7 +164,7 @@ export default function About({ setCurrentPage }: AboutProps) {
           <p className="text-slate-400 text-xs sm:text-sm">Principles we live by, from initial brief to final delivery.</p>
         </div>
  
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-8 stagger-children">
           {values.map((v, idx) => (
             <div 
               key={idx}
