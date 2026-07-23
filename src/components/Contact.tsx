@@ -92,7 +92,7 @@ export default function Contact() {
               {submitStatus === 'success' ? (
                 <div className="h-full flex flex-col items-center justify-center text-center space-y-4 py-8" id="contact-success-state">
                   <div className="bg-emerald-500/10 text-emerald-400 p-4 rounded-full border border-emerald-500/20">
-                    <CheckCircle2 className="h-12 w-12" />
+                    <CheckCircle2 className="h-8 w-8" />
                   </div>
                   <h3 className="text-lg sm:text-xl font-bold text-white">Inquiry Received Successfully</h3>
                   <p className="text-xs sm:text-sm text-slate-300 max-w-sm">

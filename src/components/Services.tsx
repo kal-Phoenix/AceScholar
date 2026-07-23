@@ -154,7 +154,7 @@ export default function Services({ setCurrentPage, setSelectedServiceType }: Ser
  
       {/* 2. SERVICES GRID */}
       <main className="max-w-7xl xl:max-w-[90%] 2xl:max-w-[95%] mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 md:py-16">
-        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-8 stagger-children">
+        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-8 stagger-children">
           {categories.map((cat) => (
             <div 
               key={cat.id}
@@ -166,21 +166,21 @@ export default function Services({ setCurrentPage, setSelectedServiceType }: Ser
               <div className="relative space-y-4 sm:space-y-6">
                 
                 {/* Header info */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div className="bg-gradient-to-br from-amber-500/15 to-amber-600/5 p-2 sm:p-3.5 rounded-xl sm:rounded-2xl w-fit group-hover:scale-110 group-hover:rotate-3 transition-transform duration-500 border border-amber-500/10">
                     <div className="h-5 w-5 sm:h-8 sm:w-8 [&_svg]:h-full [&_svg]:w-full flex items-center justify-center">
                       {cat.icon}
                     </div>
                   </div>
                   <div className="flex flex-col sm:items-end text-left sm:text-right">
-                    <span className="flex items-center space-x-1 bg-slate-800/80 border border-slate-700/60 text-slate-300 px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg text-[8px] sm:text-[11px] font-semibold uppercase tracking-wider w-fit backdrop-blur-sm">
+                    <span className="flex items-center space-x-1 bg-slate-800/80 border border-slate-700/60 text-slate-300 px-2 py-1 sm:px-3 sm:py-2 rounded-lg text-[8px] sm:text-[11px] font-semibold uppercase tracking-wider w-fit backdrop-blur-sm">
                       <Clock className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-amber-500 shrink-0" />
                       <span>{cat.turnaround}</span>
                     </span>
                   </div>
                 </div>
  
-                <div className="space-y-1.5 sm:space-y-2.5">
+                <div className="space-y-1 sm:space-y-2">
                   <h3 className="text-sm sm:text-xl font-bold text-white group-hover:text-amber-400 transition-colors duration-300 line-clamp-1 sm:line-clamp-none">
                     {cat.name}
                   </h3>
@@ -203,10 +203,10 @@ export default function Services({ setCurrentPage, setSelectedServiceType }: Ser
               </div>
  
               {/* Order Button */}
-              <div className="relative pt-5 sm:pt-8">
+              <div className="relative pt-4 sm:pt-8">
                 <button
                    onClick={() => handleOrderRedirect(cat.serviceTypeSelect)}
-                   className="w-full bg-slate-800/80 hover:bg-amber-500 text-slate-100 hover:text-[#0F172A] font-bold py-2.5 sm:py-3.5 px-3 sm:px-4 rounded-xl sm:rounded-2xl transition-all duration-300 flex items-center justify-center space-x-2 border border-slate-700/40 hover:border-amber-500 shadow-lg shadow-transparent hover:shadow-amber-500/10 cursor-pointer text-[10px] sm:text-sm truncate"
+                   className="w-full bg-slate-800/80 hover:bg-amber-500 text-slate-100 hover:text-[#0F172A] font-bold py-2 sm:py-3 px-3 sm:px-4 rounded-xl sm:rounded-2xl transition-all duration-300 flex items-center justify-center space-x-2 border border-slate-700/40 hover:border-amber-500 shadow-lg shadow-transparent hover:shadow-amber-500/10 cursor-pointer text-[10px] sm:text-sm truncate"
                 >
                   <span className="truncate">Order {cat.name}</span>
                   <ArrowRight className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" />
@@ -229,7 +229,7 @@ export default function Services({ setCurrentPage, setSelectedServiceType }: Ser
           <p className="text-xs sm:text-base text-slate-300 max-w-xl mx-auto leading-relaxed">
             Contact our dedicated support specialists. We are online 24/7 and will guide you to set up the correct project requirements.
           </p>
-          <div className="flex flex-row justify-center items-center gap-3 sm:gap-5 pt-2 sm:pt-4 max-w-md mx-auto sm:max-w-none px-2">
+          <div className="flex flex-row justify-center items-center gap-4 sm:gap-8 pt-2 sm:pt-4 max-w-md mx-auto sm:max-w-none px-2">
             <button
               onClick={() => handleRedirect('contact')}
               className="glow-btn relative flex-1 sm:w-auto bg-amber-500 hover:bg-amber-400 text-[#0F172A] font-bold px-4 py-3 sm:px-8 sm:py-4 rounded-xl transition-all duration-300 text-xs sm:text-sm cursor-pointer shadow-lg shadow-amber-500/20 hover:shadow-amber-500/40"

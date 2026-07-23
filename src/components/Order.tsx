@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Clock, Upload,
+  Clock, Upload, PenLine, Ruler, BookOpen, Code, Wrench, BarChart3, FlaskConical, Presentation,
   ChevronLeft, ShieldCheck, Lock,
-  MapPin, Globe, Check, ChevronRight, AlertCircle
+  MapPin, Globe, Check, ChevronRight, AlertCircle, Truck, Zap
 } from 'lucide-react';
 import { PageType, Profile, Order as AcademicOrder } from '../types';
 import { fallbackDb } from '../lib/supabase';
@@ -48,14 +48,14 @@ const compressImage = (file: File, maxWidth = 800, maxHeight = 800, quality = 0.
 };
 
 const SERVICE_OPTIONS = [
-  { value: 'Simple Assignment', label: 'Simple Assignment', desc: 'Short problems / quick analysis', icon: '📝' },
-  { value: '2D Drafting (Multiview and Pictorial Drawing including TitleBlock)', label: '2D Drafting', desc: 'Multiview & Pictorial Drawing w/ TitleBlock', icon: '📐' },
-  { value: 'Academic Writing', label: 'Academic Writing', desc: 'Thesis, Essay, Review', icon: '📚' },
-  { value: 'Coding Project', label: 'Coding Project', desc: 'Python, React, MATLAB', icon: '💻' },
-  { value: 'Engineering Drawing', label: 'Engineering Drawing', desc: 'CAD, SolidWorks', icon: '🔧' },
-  { value: 'Data Analysis', label: 'Data Analysis', desc: 'SPSS, R, Excel', icon: '📊' },
-  { value: 'STEM Problem Set', label: 'STEM Problem Set', desc: 'Math, Bio, Physics', icon: '🔬' },
-  { value: 'Presentations', label: 'Presentations', desc: 'Slide Decks, Posters', icon: '🎯' },
+  { value: 'Simple Assignment', label: 'Simple Assignment', desc: 'Short problems / quick analysis', icon: PenLine },
+  { value: '2D Drafting (Multiview and Pictorial Drawing including TitleBlock)', label: '2D Drafting', desc: 'Multiview & Pictorial Drawing w/ TitleBlock', icon: Ruler },
+  { value: 'Academic Writing', label: 'Academic Writing', desc: 'Thesis, Essay, Review', icon: BookOpen },
+  { value: 'Coding Project', label: 'Coding Project', desc: 'Python, React, MATLAB', icon: Code },
+  { value: 'Engineering Drawing', label: 'Engineering Drawing', desc: 'CAD, SolidWorks', icon: Wrench },
+  { value: 'Data Analysis', label: 'Data Analysis', desc: 'SPSS, R, Excel', icon: BarChart3 },
+  { value: 'STEM Problem Set', label: 'STEM Problem Set', desc: 'Math, Bio, Physics', icon: FlaskConical },
+  { value: 'Presentations', label: 'Presentations', desc: 'Slide Decks, Posters', icon: Presentation },
 ];
 
 const STEPS = ['Service', 'Details', 'Budget', 'Review', 'Payment'];
@@ -333,7 +333,7 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
               Sign In
             </button>
             <button onClick={() => { if (setRedirectPage) setRedirectPage('order'); setCurrentPage('signup'); }}
-              className="w-full bg-slate-800/80 hover:bg-slate-800 text-slate-300 font-semibold py-3 rounded-xl text-sm border border-slate-700/50 transition-all duration-200 cursor-pointer">
+              className="w-full bg-transparent hover:bg-slate-800/50 text-slate-400 hover:text-white font-semibold py-3 rounded-xl text-sm border border-slate-700/50 transition-all duration-200 cursor-pointer">
               Create Account
             </button>
           </div>
@@ -413,7 +413,7 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
                     <span className="hidden sm:inline">{label}</span>
                   </button>
                   {i < STEPS.length - 1 && (
-                    <div className={`w-3 sm:w-6 h-px mx-0 shrink-0 transition-colors duration-300 ${isDone ? 'bg-emerald-500/40' : 'bg-slate-800/60'}`} />
+                    <div className={`w-3 sm:w-6 h-0.5 mx-0 shrink-0 rounded-full transition-colors duration-300 ${isDone ? 'bg-emerald-500/40' : 'bg-slate-800/60'}`} />
                   )}
                 </React.Fragment>
               );
@@ -435,18 +435,27 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                {SERVICE_OPTIONS.map(opt => (
-                  <button key={opt.value} type="button" onClick={() => setServiceType(opt.value)}
-                    className={`group ${CARD} ${CARD_HOVER} p-4 text-left transition-all duration-200 cursor-pointer ${
-                      serviceType === opt.value
-                        ? '!border-amber-500/50 !bg-amber-500/10 !shadow-amber-500/10 ring-1 ring-amber-500/20'
-                        : ''
-                    }`}>
-                    <span className="text-xl block mb-2">{opt.icon}</span>
-                    <h4 className={`text-xs font-bold leading-tight ${serviceType === opt.value ? 'text-amber-400' : 'text-white group-hover:text-amber-400 transition-colors duration-200'}`}>{opt.label}</h4>
-                    <p className="text-[11px] text-slate-500 mt-1 leading-snug">{opt.desc}</p>
-                  </button>
-                ))}
+                {SERVICE_OPTIONS.map(opt => {
+                  const Icon = opt.icon;
+                  return (
+                    <button key={opt.value} type="button" onClick={() => setServiceType(opt.value)}
+                      className={`group ${CARD} ${CARD_HOVER} p-4 text-left transition-all duration-200 cursor-pointer ${
+                        serviceType === opt.value
+                          ? '!border-amber-500/50 !bg-amber-500/10 !shadow-amber-500/10 ring-1 ring-amber-500/20'
+                          : ''
+                      }`}>
+                      <div className={`mb-2.5 p-2 rounded-xl w-fit transition-colors duration-200 ${
+                        serviceType === opt.value
+                          ? 'bg-amber-500/20 text-amber-400'
+                          : 'bg-slate-800/60 text-slate-500 group-hover:text-amber-400 group-hover:bg-amber-500/10'
+                      }`}>
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <h4 className={`text-xs font-bold leading-tight ${serviceType === opt.value ? 'text-amber-400' : 'text-white group-hover:text-amber-400 transition-colors duration-200'}`}>{opt.label}</h4>
+                      <p className="text-[11px] text-slate-500 mt-1 leading-snug">{opt.desc}</p>
+                    </button>
+                  );
+                })}
               </div>
 
               <div className={`${CARD} p-4`}>
@@ -678,7 +687,9 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
                       : CARD_HOVER
                   }`}>
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-2xl">🚚</span>
+                    <div className={`p-2.5 rounded-xl ${paymentChoice === 'delivery' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800/60 text-slate-500'}`}>
+                      <Truck className="h-5 w-5" />
+                    </div>
                     {paymentChoice === 'delivery' && <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center shadow-md shadow-emerald-500/30"><Check className="h-3.5 w-3.5 text-white" /></div>}
                   </div>
                   <h4 className="text-sm font-bold text-white">Pay Later</h4>
@@ -692,7 +703,9 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
                       : CARD_HOVER
                   }`}>
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-2xl">⚡</span>
+                    <div className={`p-2.5 rounded-xl ${paymentChoice === 'now' ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-800/60 text-slate-500'}`}>
+                      <Zap className="h-5 w-5" />
+                    </div>
                     {paymentChoice === 'now' && <div className="w-6 h-6 rounded-full bg-amber-500 flex items-center justify-center shadow-md shadow-amber-500/30"><Check className="h-3.5 w-3.5 text-[#0F172A]" /></div>}
                   </div>
                   <h4 className="text-sm font-bold text-white">Pay Now</h4>
@@ -871,7 +884,7 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
           {step > 1 ? (
             <button type="button" onClick={handleBack}
-              className="flex items-center gap-1.5 text-slate-400 hover:text-white bg-slate-900/80 hover:bg-slate-800 border border-slate-800/80 font-semibold py-2.5 px-5 rounded-xl text-xs transition-all duration-200 cursor-pointer">
+              className="flex items-center gap-1.5 text-slate-400 hover:text-white bg-transparent hover:bg-slate-800/50 border border-slate-700/50 font-semibold py-2.5 px-5 rounded-xl text-xs transition-all duration-200 cursor-pointer">
               <ChevronLeft className="h-3.5 w-3.5" /> Back
             </button>
           ) : <div />}

@@ -68,7 +68,7 @@ export default function ResetPassword({ setCurrentPage, showToast }: ResetPasswo
 
   if (success) {
     return (
-      <div className="bg-[#0F172A] text-slate-100 min-h-[85vh] flex items-center justify-center font-sans px-4">
+      <div className="bg-[#0F172A] text-slate-100 min-h-[50vh] flex items-center justify-center font-sans px-4">
         <div className="max-w-md w-full text-center space-y-6 bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl">
           <div className="h-16 w-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto border border-emerald-500/20">
             <CheckCircle2 className="h-8 w-8 text-emerald-500" />
@@ -81,7 +81,7 @@ export default function ResetPassword({ setCurrentPage, showToast }: ResetPasswo
           </div>
           <button
             onClick={() => setCurrentPage('login')}
-            className="w-full bg-amber-500 hover:bg-amber-400 text-[#0F172A] font-bold py-2.5 px-4 rounded-lg transition-colors cursor-pointer text-sm"
+            className="w-full bg-amber-500 hover:bg-amber-400 text-[#0F172A] font-bold py-3 px-4 rounded-lg transition-colors cursor-pointer text-sm"
           >
             Sign In
           </button>
@@ -91,7 +91,7 @@ export default function ResetPassword({ setCurrentPage, showToast }: ResetPasswo
   }
 
   return (
-    <div className="bg-[#0F172A] text-slate-100 min-h-[85vh] flex items-center justify-center font-sans px-4">
+    <div className="bg-[#0F172A] text-slate-100 min-h-[50vh] flex items-center justify-center font-sans px-4">
         <div className="max-w-md w-full space-y-6 animate-fade-in-up">
         <div className="text-center space-y-2">
           <div className="h-14 w-14 rounded-2xl bg-amber-500/10 flex items-center justify-center mx-auto border border-amber-500/20">
@@ -109,7 +109,7 @@ export default function ResetPassword({ setCurrentPage, showToast }: ResetPasswo
         )}
 
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-2xl space-y-5">
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1.5">New Password</label>
               <div className="relative">

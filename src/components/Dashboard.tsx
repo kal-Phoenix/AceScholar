@@ -561,7 +561,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
             {user.role === 'expert' ? (
               <button
                 onClick={() => setCurrentPage('expert')}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-5 rounded-lg text-xs sm:text-sm shadow-md active:scale-95 transition-all flex items-center justify-center space-x-1.5 cursor-pointer"
+                className="bg-transparent border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 font-bold py-2.5 px-5 rounded-lg text-xs sm:text-sm active:scale-95 transition-all flex items-center justify-center space-x-1.5 cursor-pointer"
               >
                 <GraduationCap className="h-4 w-4" />
                 <span>Go to Expert Workspace</span>
@@ -690,7 +690,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                 {user.role === 'expert' ? (
                   <button
                     onClick={() => setCurrentPage('expert')}
-                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center space-x-1.5"
+                    className="px-5 py-2.5 bg-transparent border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 text-xs font-bold rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center space-x-1.5"
                   >
                     <GraduationCap className="h-4 w-4" />
                     <span>Go to Expert Workspace</span>
@@ -811,7 +811,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
           aria-modal="true"
           onKeyDown={(e) => { if (e.key === 'Escape') setSelectedOrder(null); }}
         >
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-6xl w-full h-[90vh] overflow-hidden shadow-2xl relative animate-in fade-in zoom-in-95 duration-150 flex flex-col">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-6xl w-full h-[90vh] overflow-hidden shadow-2xl relative animate-in fade-in zoom-in-95 duration-150 flex flex-col">
             
             {/* Modal Header */}
             <header className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-950/50 shrink-0">

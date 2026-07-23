@@ -499,7 +499,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
   const isUserAdmin = user && user.role === 'admin';
   if (!isUserAdmin) {
     return (
-      <div className="bg-[#0F172A] text-slate-100 min-h-[85vh] flex items-center justify-center font-sans px-4">
+      <div className="bg-[#0F172A] text-slate-100 min-h-[50vh] flex items-center justify-center font-sans px-4">
         <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 text-center space-y-4 shadow-xl">
           <ShieldCheck className="h-12 w-12 text-rose-500 mx-auto" />
           <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">Access Restricted</h2>
@@ -773,7 +773,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                             <button
                               type="button"
                               onClick={() => handleVerifyEthiopiaPayment('rejected')}
-                              className="flex-1 bg-slate-800 hover:bg-red-500 hover:text-white text-slate-300 font-bold py-2 px-3 rounded-lg text-xs flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
+                              className="flex-1 bg-transparent border border-slate-700/50 text-slate-400 hover:bg-slate-800/50 hover:text-rose-400 font-bold py-2 px-3 rounded-lg text-xs flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
                             >
                               <X className="h-4 w-4" />
                               <span>Reject</span>
@@ -1105,7 +1105,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                         </button>
                         <button
                           onClick={() => handleRejectApplication(app)}
-                          className="px-4 py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 text-rose-400 font-bold text-xs rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                          className="px-4 py-2 bg-transparent border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 font-bold text-xs rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-1.5"
                         >
                           <X className="h-4 w-4" />
                           <span>Decline Application</span>

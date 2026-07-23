@@ -173,18 +173,18 @@ export default function Home({ setCurrentPage, user }: HomeProps) {
           </p>
         </div>
  
-        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6 stagger-children">
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-8 stagger-children">
           {services.map((item, idx) => (
             <div 
               key={idx}
-              className="group relative bg-slate-900/40 border border-slate-800/60 hover:border-amber-500/40 p-4 sm:p-8 rounded-2xl sm:rounded-3xl transition-all duration-500 flex flex-col justify-between card-hover cursor-pointer overflow-hidden"
+              className="group relative bg-slate-900/40 border border-slate-800/60 hover:border-amber-500/40 p-5 sm:p-8 rounded-2xl sm:rounded-3xl transition-all duration-500 flex flex-col justify-between card-hover cursor-pointer overflow-hidden"
               onClick={() => handleNav('services')}
             >
               {/* Gradient overlay on hover */}
               <div className="absolute inset-0 bg-gradient-to-b from-amber-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-2xl sm:rounded-3xl"></div>
               
               <div className="relative space-y-3 sm:space-y-5">
-                <div className="bg-gradient-to-br from-amber-500/15 to-amber-600/5 p-2 sm:p-3.5 rounded-xl sm:rounded-2xl w-fit group-hover:scale-110 group-hover:rotate-3 transition-transform duration-500 border border-amber-500/10">
+                <div className="bg-gradient-to-br from-amber-500/15 to-amber-600/5 p-2.5 sm:p-3 rounded-xl sm:rounded-2xl w-fit group-hover:scale-110 group-hover:rotate-3 transition-transform duration-500 border border-amber-500/10">
                   <div className="h-5 w-5 sm:h-6 sm:w-6 [&_svg]:h-full [&_svg]:w-full flex items-center justify-center">
                     {item.icon}
                   </div>
@@ -215,26 +215,26 @@ export default function Home({ setCurrentPage, user }: HomeProps) {
             <p className="text-slate-400 text-xs sm:text-sm max-w-md mx-auto">Get your academic challenges solved in three simple steps.</p>
           </div>
  
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-10 relative stagger-children">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-8 relative stagger-children">
             {steps.map((step, idx) => (
               <div key={idx} className="relative group">
                 {/* Connection line on desktop */}
                 {idx < 2 && (
                   <div className="hidden md:block absolute top-1/2 -right-5 lg:-right-6 transform -translate-y-1/2 z-10">
                     <div className="flex items-center">
-                      <div className="w-8 lg:w-12 h-[2px] bg-gradient-to-r from-amber-500/60 to-amber-500/20"></div>
-                      <div className="w-2 h-2 rounded-full bg-amber-500/60 -ml-1"></div>
+                      <div className="w-8 lg:w-12 h-0.5 bg-gradient-to-r from-amber-500/60 to-amber-500/20 rounded-full"></div>
+                      <div className="w-2.5 h-2.5 rounded-full bg-amber-500/60 -ml-1"></div>
                     </div>
                   </div>
                 )}
                 
-                <div className="relative bg-slate-900/30 border border-slate-800/60 group-hover:border-amber-500/30 p-6 sm:p-8 rounded-2xl sm:rounded-3xl text-center space-y-4 sm:space-y-5 transition-all duration-500 card-hover h-full">
+                <div className="relative bg-slate-900/30 border border-slate-800/60 group-hover:border-amber-500/30 p-5 sm:p-8 rounded-2xl sm:rounded-3xl text-center space-y-4 sm:space-y-5 transition-all duration-500 card-hover h-full">
                   {/* Step number background */}
                   <span className="absolute top-3 right-4 sm:top-4 sm:right-6 text-5xl sm:text-7xl font-black text-slate-800/40 select-none font-mono group-hover:text-amber-500/10 transition-colors duration-500">
                     {step.num}
                   </span>
                   
-                  <div className="relative bg-gradient-to-br from-amber-500 to-amber-600 text-[#0F172A] p-2.5 sm:p-3 rounded-xl sm:rounded-2xl inline-flex items-center justify-center shadow-lg shadow-amber-500/20 group-hover:shadow-amber-500/40 transition-shadow duration-500">
+                  <div className="relative bg-gradient-to-br from-amber-500 to-amber-600 text-[#0F172A] p-2.5 rounded-xl sm:rounded-2xl inline-flex items-center justify-center shadow-lg shadow-amber-500/20 group-hover:shadow-amber-500/40 transition-shadow duration-500">
                     {step.icon}
                   </div>
                   <h3 className="relative text-base sm:text-xl font-bold text-white">{step.title}</h3>
@@ -312,7 +312,7 @@ export default function Home({ setCurrentPage, user }: HomeProps) {
               </p>
               <div className="relative pt-4 border-t border-slate-800/60">
                 <span className="block text-xs sm:text-sm font-bold text-white">{testimonial.name}</span>
-                <span className="block text-[10px] sm:text-xs text-slate-500 mt-0.5">{testimonial.role}</span>
+                <span className="block text-[10px] sm:text-xs text-slate-400 mt-0.5">{testimonial.role}</span>
               </div>
             </div>
           ))}

@@ -186,7 +186,7 @@ export default function Pricing({ setCurrentPage, setSelectedServiceType, showTo
               className={`px-3 py-1.5 sm:px-5 sm:py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
                 activeCategory === key
                   ? 'bg-amber-500 text-[#0F172A] shadow-md shadow-amber-500/10'
-                  : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800'
+                  : 'bg-transparent hover:bg-slate-800/50 text-slate-400 border border-transparent hover:border-slate-700/50'
               }`}
             >
               {pricingCategories[key].title}
@@ -197,7 +197,7 @@ export default function Pricing({ setCurrentPage, setSelectedServiceType, showTo
  
       {/* 2. PRICING TABLES */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-8">
           {pricingCategories[activeCategory].tiers.map((tier, idx) => (
             <div
               key={idx}
@@ -222,7 +222,7 @@ export default function Pricing({ setCurrentPage, setSelectedServiceType, showTo
                 </div>
               )}
               
-              <div className="relative space-y-5 sm:space-y-7">
+              <div className="relative space-y-4 sm:space-y-6">
                 {/* Title */}
                 <div>
                   <h3 className="text-lg sm:text-xl font-bold text-white">{tier.name}</h3>
@@ -246,7 +246,7 @@ export default function Pricing({ setCurrentPage, setSelectedServiceType, showTo
                 <ul className="space-y-2.5 sm:space-y-3.5 pt-5 sm:pt-7 border-t border-slate-800/60">
                   {tier.bullets.map((bullet, bIdx) => (
                     <li key={bIdx} className="flex items-start text-xs sm:text-sm text-slate-300">
-                      <Check className={`h-4 w-4 sm:h-[18px] sm:w-[18px] mr-2 sm:mr-2.5 shrink-0 mt-0.5 ${idx === 1 ? 'text-amber-500' : 'text-emerald-500'}`} />
+                      <Check className="h-4 w-4 sm:h-[18px] sm:w-[18px] mr-2 sm:mr-2.5 shrink-0 mt-0.5 text-amber-500" />
                       <span>{bullet}</span>
                     </li>
                   ))}
@@ -276,7 +276,7 @@ export default function Pricing({ setCurrentPage, setSelectedServiceType, showTo
  
       {/* 3. FREE QUOTE SECTION */}
       <section className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10" id="quote-form-section">
-        <div className="bg-gradient-to-r from-slate-900 to-[#1E293B] border border-slate-800 rounded-2xl p-5 sm:p-10 shadow-2xl relative overflow-hidden">
+        <div className="bg-gradient-to-r from-slate-900 to-[#1E293B] border border-slate-800 rounded-2xl p-4 sm:p-8 shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-full filter blur-xl pointer-events-none"></div>
           
           <div className="relative z-10 max-w-2xl mx-auto text-center space-y-2 sm:space-y-3 mb-6 sm:mb-8">

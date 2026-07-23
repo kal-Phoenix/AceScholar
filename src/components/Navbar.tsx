@@ -106,8 +106,8 @@ export default function Navbar({ currentPage, setCurrentPage, user, onLogout }: 
                 ) : (
                   <button
                     onClick={() => handleNavClick('dashboard')}
-                    className={`flex items-center space-x-1.5 px-3 py-2 rounded-md text-sm font-medium border border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-all ${
-                      currentPage === 'dashboard' ? 'border-amber-500 bg-amber-500/20' : ''
+                    className={`flex items-center space-x-1.5 px-3 py-2 rounded-md text-sm font-medium bg-transparent text-slate-300 hover:text-white hover:bg-slate-800/50 transition-all ${
+                      currentPage === 'dashboard' ? 'text-amber-500 font-semibold' : ''
                     }`}
                   >
                     <LayoutDashboard className="h-4 w-4" />
@@ -212,8 +212,8 @@ export default function Navbar({ currentPage, setCurrentPage, user, onLogout }: 
                 ) : (
                   <button
                     onClick={() => handleNavClick('dashboard')}
-                    className={`flex items-center justify-center space-x-1.5 py-3 px-3 rounded-lg text-xs font-semibold transition-all text-amber-400 bg-amber-500/5 border border-amber-500/10 min-h-[44px] ${
-                      currentPage === 'dashboard' ? 'bg-amber-500/10 border-amber-500/20' : ''
+                    className={`flex items-center justify-center space-x-1.5 py-3 px-3 rounded-lg text-xs font-semibold transition-all text-slate-300 bg-slate-900/40 border border-slate-800/60 hover:text-white hover:bg-slate-800 min-h-[44px] ${
+                      currentPage === 'dashboard' ? 'text-amber-500 font-semibold border-amber-500/20' : ''
                     }`}
                   >
                     <LayoutDashboard className="h-4 w-4" />

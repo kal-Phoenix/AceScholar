@@ -346,7 +346,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
   const isUserExpert = user && user.role === 'expert';
   if (!isUserExpert) {
     return (
-      <div className="bg-[#0F172A] text-slate-100 min-h-[85vh] flex items-center justify-center font-sans px-4">
+      <div className="bg-[#0F172A] text-slate-100 min-h-[50vh] flex items-center justify-center font-sans px-4">
         <div className="max-w-md w-full text-center space-y-4 bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl">
           <GraduationCap className="h-12 w-12 text-rose-500 mx-auto" />
           <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">Access Restricted</h2>
@@ -774,7 +774,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
                             </button>
                             <button
                               onClick={() => handleDeclineOffer(selectedOrder.id)}
-                              className="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 font-bold text-xs py-2 px-5 rounded-lg transition-colors flex items-center justify-center space-x-1.5 cursor-pointer"
+                              className="bg-transparent border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 font-bold text-xs py-2 px-5 rounded-lg transition-colors flex items-center justify-center space-x-1.5 cursor-pointer"
                             >
                               <X className="h-4 w-4" />
                               <span>Decline Offer</span>
@@ -864,7 +864,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
                               type="button"
                               disabled={isSaving}
                               onClick={handleSaveOrderSettings}
-                              className="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-extrabold text-xs py-2 px-5 rounded-lg transition-all flex items-center justify-center space-x-1.5 shadow cursor-pointer"
+                              className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 disabled:opacity-50 font-extrabold text-xs py-2 px-5 rounded-lg transition-all flex items-center justify-center space-x-1.5 shadow cursor-pointer"
                             >
                               <Save className="h-3.5 w-3.5" />
                               <span>Save Overrides</span>

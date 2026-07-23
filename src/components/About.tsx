@@ -36,17 +36,17 @@ export default function About({ setCurrentPage }: AboutProps) {
 
   const values = [
     {
-      icon: <Target className="h-5 w-5 text-amber-500" />,
+      icon: <Target className="h-6 w-6 text-amber-500" />,
       title: 'Uncompromised Quality',
       desc: 'We never cut corners. Every equation, drawing tolerance, or bibliography reference is verified double-blind.'
     },
     {
-      icon: <Shield className="h-5 w-5 text-amber-500" />,
+      icon: <Shield className="h-6 w-6 text-amber-500" />,
       title: 'Strict Confidentiality',
       desc: 'Your personal data is sanitized from all document meta headers. We are a silent partner to your success.'
     },
     {
-      icon: <CalendarDays className="h-5 w-5 text-amber-500" />,
+      icon: <CalendarDays className="h-6 w-6 text-amber-500" />,
       title: 'Unbending Reliability',
       desc: 'We respect schedules. If we accept an assignment with a set deadline, delivery on or ahead of time is absolute.'
     }

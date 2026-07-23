@@ -83,7 +83,7 @@ export default function Signup({ setCurrentPage, showToast }: SignupProps) {
   }
 
   return (
-    <div className="bg-[#0F172A] font-sans text-slate-100 min-h-[60vh] flex items-center justify-center px-4 py-8" id="signup-page-container">
+    <div className="bg-[#0F172A] font-sans text-slate-100 min-h-[50vh] flex items-center justify-center px-4 py-8" id="signup-page-container">
       
       <div className="max-w-md w-full bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl space-y-6 relative overflow-hidden animate-fade-in-up">
         
@@ -312,7 +312,7 @@ function EmailVerificationScreen({
   };
 
   return (
-    <div className="bg-[#0F172A] font-sans text-slate-100 min-h-[60vh] flex items-center justify-center px-4 py-8" id="email-verification-screen">
+    <div className="bg-[#0F172A] font-sans text-slate-100 min-h-[50vh] flex items-center justify-center px-4 py-8" id="email-verification-screen">
       <div className="max-w-md w-full bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl space-y-6 relative overflow-hidden">
 
         {/* Glow accents */}
@@ -367,7 +367,7 @@ function EmailVerificationScreen({
         <button
           onClick={handleResend}
           disabled={resendLoading || resendCooldown > 0}
-          className="w-full border border-slate-700 hover:border-amber-500/50 hover:bg-amber-500/5 text-slate-300 hover:text-amber-400 font-semibold py-2.5 px-4 rounded-lg transition-all flex items-center justify-center gap-2 text-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full bg-transparent border border-slate-700/50 text-slate-400 hover:bg-slate-800/50 font-semibold py-2.5 px-4 rounded-lg transition-all flex items-center justify-center gap-2 text-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           id="resend-verification-btn"
         >
           <Mail className="h-4 w-4" />
