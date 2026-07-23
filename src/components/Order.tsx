@@ -364,7 +364,7 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
 
   // ─── Main Order Form ───
   return (
-    <div className="bg-[#0F172A] text-slate-100 h-screen flex flex-col font-sans">
+    <div className="bg-[#0F172A] text-slate-100 font-sans">
 
       {/* ── Top Bar ── */}
       <div className="fixed top-0 left-0 right-0 z-30 border-b border-slate-800/80 bg-[#0F172A]">
@@ -418,7 +418,7 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
       </div>
 
       {/* ── Content ── */}
-      <div className="flex-1 px-4 sm:px-6 pt-[76px] pb-[56px] overflow-y-auto">
+      <div className="px-4 sm:px-6 pt-[76px] pb-[56px]">
         <div className="max-w-4xl mx-auto py-2">
 
           {/* ═══ STEP 1: Service ═══ */}

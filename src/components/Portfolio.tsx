@@ -76,7 +76,7 @@ export default function Portfolio({ setCurrentPage }: PortfolioProps) {
       </header>
 
       {/* 2. CATEGORIES GRID */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 stagger-children">
           {categories.map((cat, idx) => (
             <div
@@ -95,7 +95,7 @@ export default function Portfolio({ setCurrentPage }: PortfolioProps) {
       </main>
 
       {/* 3. QUALITY ASSURANCE */}
-      <section className="bg-slate-950/40 border-y border-slate-900 py-10 sm:py-16">
+      <section className="bg-slate-950/40 border-y border-slate-900 py-6 sm:py-10">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-2 sm:space-y-3 mb-8 sm:mb-10">
             <Sparkles className="h-6 w-6 text-amber-500 mx-auto" />
@@ -114,7 +114,7 @@ export default function Portfolio({ setCurrentPage }: PortfolioProps) {
       </section>
 
       {/* 4. BOTTOM CTA */}
-      <section className="py-10 sm:py-16 px-4 text-center">
+      <section className="py-6 sm:py-10 px-4 text-center">
         <div className="max-w-3xl mx-auto space-y-4 sm:space-y-5">
           <h2 className="text-xl sm:text-3xl font-bold text-white">Ready to place your order?</h2>
           <p className="text-xs sm:text-sm text-slate-300 max-w-md mx-auto">

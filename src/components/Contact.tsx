@@ -47,7 +47,7 @@ export default function Contact() {
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto space-y-8 px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+      <div className="max-w-6xl mx-auto space-y-8 px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
 
         {/* Contact Form Card */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden">

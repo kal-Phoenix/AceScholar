@@ -70,7 +70,7 @@ export default function About({ setCurrentPage }: AboutProps) {
       </header>
  
       {/* 2. OUR STORY SECTION */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-20">
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-12 items-center">
           
           <div className="space-y-4 sm:space-y-6">
@@ -129,7 +129,7 @@ export default function About({ setCurrentPage }: AboutProps) {
       </section>
  
       {/* 3. WHY CHOOSE US */}
-      <section className="bg-gradient-to-b from-slate-950/60 via-[#0F172A] to-slate-950/60 border-y border-slate-800/40 py-12 sm:py-20">
+      <section className="bg-gradient-to-b from-slate-950/60 via-[#0F172A] to-slate-950/60 border-y border-slate-800/40 py-6 sm:py-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-3 sm:space-y-4 mb-10 sm:mb-16">
             <span className="text-amber-500 text-[10px] sm:text-xs font-bold tracking-widest uppercase">Why Us</span>
@@ -157,7 +157,7 @@ export default function About({ setCurrentPage }: AboutProps) {
       </section>
  
       {/* 4. OUR VALUES */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-20">
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
         <div className="text-center space-y-2 sm:space-y-3 mb-8 sm:mb-14">
           <h2 className="text-xl sm:text-3xl font-bold text-white">Our Values</h2>
           <div className="h-1 w-16 bg-amber-500 mx-auto rounded"></div>
@@ -194,7 +194,7 @@ export default function About({ setCurrentPage }: AboutProps) {
       </section>
  
       {/* 6. CTA */}
-      <section className="py-10 sm:py-20 text-center px-4">
+      <section className="py-6 sm:py-10 text-center px-4">
         <div className="max-w-3xl mx-auto space-y-4 sm:space-y-5">
           <h2 className="text-lg sm:text-3xl font-extrabold text-white">Join thousands of students who trust us</h2>
           <p className="text-xs sm:text-sm text-slate-400 max-w-md mx-auto">

@@ -664,7 +664,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
           </div>
 
           {isLoading ? (
-            <div className="text-center py-20 bg-slate-900/40 border border-slate-800/80 rounded-2xl space-y-3">
+            <div className="text-center py-10 bg-slate-900/40 border border-slate-800/80 rounded-2xl space-y-3">
               <span className="animate-spin inline-block h-8 w-8 border-2 border-amber-500 border-t-transparent rounded-full"></span>
               <p className="text-xs text-slate-400 font-semibold tracking-wide">Synchronizing your academic portfolio...</p>
             </div>

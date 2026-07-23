@@ -71,7 +71,7 @@ export default function Home({ setCurrentPage, user }: HomeProps) {
     <div className="bg-[#0F172A] font-sans text-slate-100" id="homepage-container">
       
       {/* 2. HERO SECTION */}
-      <section className="relative min-h-[60vh] sm:min-h-[70vh] flex items-center justify-center overflow-hidden px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+      <section className="relative min-h-[40vh] sm:min-h-[50vh] flex items-center justify-center overflow-hidden px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         
         {/* Animated gradient background */}
         <div className="absolute inset-0 bg-gradient-to-br from-[#0F172A] via-[#1a1f3a] to-[#0F172A] animate-gradient"></div>
@@ -161,7 +161,7 @@ export default function Home({ setCurrentPage, user }: HomeProps) {
       </section>
  
       {/* 3. SERVICES SNAPSHOT */}
-      <section className="py-16 sm:py-20 md:py-28 max-w-7xl xl:max-w-[90%] 2xl:max-w-[95%] mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="py-8 sm:py-12 md:py-16 max-w-7xl xl:max-w-[90%] 2xl:max-w-[95%] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center space-y-3 sm:space-y-4 mb-10 sm:mb-16">
           <span className="text-amber-500 text-[10px] sm:text-xs font-bold tracking-widest uppercase">Our Expertise</span>
           <h2 className="text-2xl sm:text-3xl md:text-5xl font-extrabold tracking-tight text-white">
@@ -206,7 +206,7 @@ export default function Home({ setCurrentPage, user }: HomeProps) {
       </section>
  
       {/* 5. HOW IT WORKS */}
-      <section className="bg-gradient-to-b from-slate-950/60 via-[#0F172A] to-slate-950/60 border-y border-slate-800/40 py-16 sm:py-20 md:py-28">
+      <section className="bg-gradient-to-b from-slate-950/60 via-[#0F172A] to-slate-950/60 border-y border-slate-800/40 py-8 sm:py-12 md:py-16">
         <div className="max-w-7xl xl:max-w-[90%] 2xl:max-w-[95%] mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-3 sm:space-y-4 mb-10 sm:mb-16">
             <span className="text-amber-500 text-[10px] sm:text-xs font-bold tracking-widest uppercase">Simple Process</span>
@@ -247,7 +247,7 @@ export default function Home({ setCurrentPage, user }: HomeProps) {
       </section>
  
       {/* 6. SOCIAL PROOF & TRUST SIGNALS */}
-      <section className="py-16 sm:py-20 md:py-28 max-w-7xl xl:max-w-[90%] 2xl:max-w-[95%] mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="py-8 sm:py-12 md:py-16 max-w-7xl xl:max-w-[90%] 2xl:max-w-[95%] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center space-y-3 sm:space-y-4 mb-10 sm:mb-16">
           <span className="text-amber-500 text-[10px] sm:text-xs font-bold tracking-widest uppercase">Social Proof</span>
           <h2 className="text-2xl sm:text-3xl md:text-5xl font-extrabold tracking-tight text-white">
@@ -320,7 +320,7 @@ export default function Home({ setCurrentPage, user }: HomeProps) {
       </section>
 
       {/* 7. FINAL CTA BANNER */}
-      <section className="relative overflow-hidden border-t border-slate-800/40 py-16 sm:py-24 px-4">
+      <section className="relative overflow-hidden border-t border-slate-800/40 py-8 sm:py-12 px-4">
         {/* Gradient background */}
         <div className="absolute inset-0 bg-gradient-to-br from-[#1E293B] via-[#0F172A] to-[#1a1f3a]"></div>
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-amber-500/8 rounded-full filter blur-[120px] pointer-events-none"></div>

@@ -196,7 +196,7 @@ export default function Pricing({ setCurrentPage, setSelectedServiceType, showTo
       </section>
  
       {/* 2. PRICING TABLES */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-14">
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-8">
           {pricingCategories[activeCategory].tiers.map((tier, idx) => (
             <div
@@ -348,7 +348,7 @@ export default function Pricing({ setCurrentPage, setSelectedServiceType, showTo
       </section>
  
       {/* 4. FAQ SECTION */}
-      <section className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-20 border-t border-slate-900">
+      <section className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 border-t border-slate-900">
         <div className="text-center space-y-2 sm:space-y-3 mb-8 sm:mb-12">
           <HelpCircle className="h-6 sm:h-8 w-6 sm:w-8 text-amber-500 mx-auto" />
           <h2 className="text-xl sm:text-3xl font-bold text-white">Frequently Asked Questions</h2>

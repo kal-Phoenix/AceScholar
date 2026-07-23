@@ -941,7 +941,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
             </div>
 
             {contactMessages.length === 0 ? (
-              <div className="text-center py-16 text-slate-500 text-xs">No general public contact inquiries logged in database.</div>
+              <div className="text-center py-8 text-slate-500 text-xs">No general public contact inquiries logged in database.</div>
             ) : (
               <div className="space-y-4">
                 {contactMessages.map((msg) => (
@@ -1016,7 +1016,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
             </div>
 
             {applications.length === 0 ? (
-              <div className="text-center py-16 text-slate-500 text-xs">No candidate applications currently logged in system.</div>
+              <div className="text-center py-8 text-slate-500 text-xs">No candidate applications currently logged in system.</div>
             ) : (
               <div className="space-y-4">
                 {applications.map((app) => (
@@ -1222,7 +1222,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
               );
 
               return filtered.length === 0 ? (
-                <div className="text-center py-16 bg-slate-950/20 border border-slate-800 rounded-xl text-slate-500 text-xs font-light">
+                <div className="text-center py-8 bg-slate-950/20 border border-slate-800 rounded-xl text-slate-500 text-xs font-light">
                   No payment transactions match search filters or exist.
                 </div>
               ) : (

@@ -384,7 +384,7 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-    <div className="min-h-screen bg-[#0F172A] flex flex-col font-sans" id="app-root">
+    <div className="min-h-screen bg-[#0F172A] font-sans" id="app-root">
       
       {/* 1. STICKY BRANDED HEADER/NAVBAR */}
       {!isFullscreenPage && (
@@ -398,7 +398,7 @@ export default function App() {
       )}
 
       {/* 2. MAIN SCROLLABLE CONTENT BODY */}
-      <main className={`${isFullscreenPage ? 'flex-1' : 'flex-1'} animate-fade-in`} key={currentPage}>
+      <main className="animate-fade-in" key={currentPage}>
         {renderActivePage()}
       </main>
 

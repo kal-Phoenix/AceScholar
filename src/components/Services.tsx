@@ -219,7 +219,7 @@ export default function Services({ setCurrentPage, setSelectedServiceType }: Ser
       </main>
  
       {/* 3. BOTTOM CTA */}
-      <section className="bg-gradient-to-b from-slate-950/60 via-[#0F172A] to-slate-950/60 border-t border-slate-800/40 py-12 sm:py-18 px-4">
+      <section className="bg-gradient-to-b from-slate-950/60 via-[#0F172A] to-slate-950/60 border-t border-slate-800/40 py-6 sm:py-10 px-4">
         <div className="max-w-4xl mx-auto text-center space-y-5 sm:space-y-7">
           <div className="inline-flex items-center space-x-2 glass rounded-full px-4 py-2 sm:px-5 sm:py-2.5 text-[10px] sm:text-xs font-semibold text-slate-300">
             <HelpCircle className="h-4 w-4 sm:h-5 sm:w-5 text-amber-500" />
