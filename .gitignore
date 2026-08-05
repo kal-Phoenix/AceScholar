@@ -6,7 +6,6 @@ coverage/
 *.log
 .env
 .env.*
-!.env.example
 .freebuff/
 .freebuffdebug-server.log
 *.pem
