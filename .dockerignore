@@ -1,8 +1,12 @@
 node_modules
 dist
+build
 .git
+.github
 .env
-.env*
+.env.*
 !.env.example
 *.log
-.freebuff
+.DS_Store
+.opencode
+coverage

@@ -1,6 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ArrowRight, BookOpen, Code, Layers, BarChart3, Binary, Presentation, ShieldCheck, Users, ChevronRight, Star, Clock, CheckCircle2, Globe, Sparkles, MousePointer2 } from 'lucide-react';
 import { PageType, Profile } from '../types';
+import {
+  STAT_PROJECTS_COMPLETED, STAT_ON_TIME_DELIVERY, STAT_AVERAGE_RATING, STAT_COUNTRIES_SERVED,
+} from '../lib/constants';
 import logoBg from '/No BG Logo.png';
 import ScrollReveal from './ScrollReveal';
 import RippleButton from './RippleButton';
@@ -8,6 +11,7 @@ import TiltCard from './TiltCard';
 
 interface HomeProps {
   setCurrentPage: (page: PageType) => void;
+  setSelectedServiceType?: (service: string) => void;
   user: Profile | null;
 }
 
@@ -45,7 +49,7 @@ function AnimatedCounter({ target, suffix = '' }: { target: number; suffix?: str
   return <span ref={ref}>{count.toLocaleString()}{suffix}</span>;
 }
 
-export default function Home({ setCurrentPage, user }: HomeProps) {
+export default function Home({ setCurrentPage, setSelectedServiceType, user }: HomeProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [scrollY, setScrollY] = useState(0);
   const heroRef = useRef<HTMLElement>(null);
@@ -62,19 +66,8 @@ export default function Home({ setCurrentPage, user }: HomeProps) {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Spotlight mouse follow for cards
-  const handleCardMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const card = e.currentTarget;
-    const rect = card.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
-    card.style.setProperty('--mouse-x', `${x}%`);
-    card.style.setProperty('--mouse-y', `${y}%`);
-  }, []);
-
   const handleNav = (page: PageType) => {
     setCurrentPage(page);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const services = [
@@ -82,31 +75,37 @@ export default function Home({ setCurrentPage, user }: HomeProps) {
       icon: <BookOpen className="h-6 w-6 text-amber-500" />,
       title: 'Academic Writing',
       desc: 'Flawless research papers, literature reviews, thesis chapters, and critical essays.',
+      serviceType: 'Academic Writing',
     },
     {
       icon: <Code className="h-6 w-6 text-amber-500" />,
       title: 'Coding Projects',
       desc: 'Clean source code in Python, C++, React, MATLAB, full system setup & bugs fix.',
+      serviceType: 'Coding Project',
     },
     {
       icon: <Layers className="h-6 w-6 text-amber-500" />,
       title: 'Engineering Drawings',
       desc: 'Professional CAD models, SolidWorks blueprints, structural analysis, and technical reports.',
+      serviceType: 'Engineering Drawing',
     },
     {
       icon: <BarChart3 className="h-6 w-6 text-amber-500" />,
       title: 'Data Analysis',
       desc: 'Robust statistics, SPSS analysis, Excel modeling, predictive math, and data visualizations.',
+      serviceType: 'Data Analysis',
     },
     {
       icon: <Binary className="h-6 w-6 text-amber-500" />,
       title: 'STEM Problem Sets',
       desc: 'Step-by-step rigorous solving for advanced math, chemistry, physics, and bio assignments.',
+      serviceType: 'STEM Problem Set',
     },
     {
       icon: <Presentation className="h-6 w-6 text-amber-500" />,
       title: 'Presentations',
       desc: 'Polished slide decks, academic posters, pitch decks, and high-impact designs.',
+      serviceType: 'Presentations',
     },
   ];
 
@@ -203,7 +202,7 @@ export default function Home({ setCurrentPage, user }: HomeProps) {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
             </span>
-            <span className="text-amber-400 text-[11px] sm:text-xs font-semibold uppercase tracking-wider">Global Private Academic Solutions</span>
+            <span className="text-amber-400 text-[11px] sm:text-xs font-semibold uppercase tracking-wider">Fast & Confidential Academic Support</span>
           </div>
 
           {/* Main Heading with letter stagger */}
@@ -278,18 +277,16 @@ export default function Home({ setCurrentPage, user }: HomeProps) {
           </div>
         </ScrollReveal>
 
-        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 stagger-children">
           {services.map((item, idx) => (
             <ScrollReveal key={idx} delay={idx % 3} direction="up">
-              <TiltCard className="h-full" maxTilt={5}>
                 <div 
-                  className="group relative bg-slate-900/40 border border-slate-800/60 p-5 sm:p-7 rounded-2xl sm:rounded-3xl transition-all duration-500 flex flex-col justify-between cursor-pointer overflow-hidden spotlight-card h-full"
-                  onClick={() => handleNav('services')}
-                  onMouseMove={handleCardMouseMove}
+                  className="group relative bg-slate-900/40 border border-slate-800/60 hover:border-amber-500/30 p-5 sm:p-7 rounded-2xl sm:rounded-3xl transition-all duration-500 flex flex-col justify-between cursor-pointer overflow-hidden spotlight-card h-full"
+                  onClick={() => {
+                    if (setSelectedServiceType) setSelectedServiceType(item.serviceType);
+                    setCurrentPage('order');
+                  }}
                 >
-                  {/* Gradient overlay on hover */}
-                  <div className="absolute inset-0 bg-gradient-to-b from-amber-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-2xl sm:rounded-3xl"></div>
-                  
                   <div className="relative space-y-3 sm:space-y-4">
                     <div className="bg-gradient-to-br from-amber-500/15 to-amber-600/5 p-2.5 sm:p-3 rounded-xl sm:rounded-2xl w-fit group-hover:scale-110 group-hover:rotate-3 transition-transform duration-500 border border-amber-500/10">
                       <div className="h-5 w-5 sm:h-6 sm:w-6 [&_svg]:h-full [&_svg]:w-full flex items-center justify-center">
@@ -308,7 +305,6 @@ export default function Home({ setCurrentPage, user }: HomeProps) {
                     <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 ml-1 transform group-hover:translate-x-1.5 transition-transform duration-300 shrink-0" />
                   </div>
                 </div>
-              </TiltCard>
             </ScrollReveal>
           ))}
         </div>
@@ -348,7 +344,7 @@ export default function Home({ setCurrentPage, user }: HomeProps) {
                   )}
                   
                   <TiltCard className="h-full" maxTilt={4}>
-                    <div className="relative bg-slate-900/30 border border-slate-800/60 group-hover:border-amber-500/30 p-6 sm:p-8 rounded-2xl sm:rounded-3xl text-center space-y-4 sm:space-y-5 transition-all duration-500 card-hover h-full spotlight-card" onMouseMove={handleCardMouseMove}>
+                    <div className="relative bg-slate-900/30 border border-slate-800/60 group-hover:border-amber-500/30 p-6 sm:p-8 rounded-2xl sm:rounded-3xl text-center space-y-4 sm:space-y-5 transition-all duration-500 card-hover h-full spotlight-card" >
                       {/* Step number background */}
                       <span className="absolute top-3 right-4 sm:top-4 sm:right-6 text-5xl sm:text-7xl font-black text-slate-800/40 select-none font-mono group-hover:text-amber-500/10 transition-colors duration-500">
                         {step.num}
@@ -372,7 +368,7 @@ export default function Home({ setCurrentPage, user }: HomeProps) {
       <section className="py-10 sm:py-14 md:py-20 max-w-7xl xl:max-w-[90%] 2xl:max-w-[95%] mx-auto px-4 sm:px-6 lg:px-8">
         <ScrollReveal>
           <div className="text-center space-y-3 sm:space-y-4 mb-10 sm:mb-16">
-            <span className="text-amber-500 text-xs sm:text-sm font-bold tracking-widest uppercase">Social Proof</span>
+            <span className="text-amber-500 text-xs sm:text-sm font-bold tracking-widest uppercase">Client Reviews</span>
             <h2 className="text-2xl sm:text-3xl md:text-5xl font-extrabold tracking-tight text-white">
               Trusted by Students Worldwide
             </h2>
@@ -386,13 +382,13 @@ export default function Home({ setCurrentPage, user }: HomeProps) {
         {/* Stats Bar */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 mb-12 sm:mb-16">
           {[
-            { value: 2500, suffix: '+', label: 'Projects Completed', icon: <CheckCircle2 className="h-5 w-5 text-amber-500" /> },
-            { value: 98, suffix: '%', label: 'On-time Delivery', icon: <Clock className="h-5 w-5 text-amber-500" /> },
-            { value: 49, suffix: '/5', label: 'Average Rating', icon: <Star className="h-5 w-5 text-amber-500" /> },
-            { value: 50, suffix: '+', label: 'Countries Served', icon: <Globe className="h-5 w-5 text-amber-500" /> },
+            { value: STAT_PROJECTS_COMPLETED, suffix: '+', label: 'Projects Completed', icon: <CheckCircle2 className="h-5 w-5 text-amber-500" /> },
+            { value: STAT_ON_TIME_DELIVERY, suffix: '%', label: 'On-time Delivery', icon: <Clock className="h-5 w-5 text-amber-500" /> },
+            { value: STAT_AVERAGE_RATING, suffix: '/5', label: 'Average Rating', icon: <Star className="h-5 w-5 text-amber-500" /> },
+            { value: STAT_COUNTRIES_SERVED, suffix: '+', label: 'Countries Served', icon: <Globe className="h-5 w-5 text-amber-500" /> },
           ].map((stat, idx) => (
             <ScrollReveal key={idx} delay={idx} direction="scale">
-              <div className="group relative bg-slate-900/40 border border-slate-800/60 p-5 sm:p-7 rounded-2xl sm:rounded-3xl text-center space-y-3 card-hover overflow-hidden hover:border-amber-500/20 transition-all duration-500 spotlight-card" onMouseMove={handleCardMouseMove}>
+              <div className="group relative bg-slate-900/40 border border-slate-800/60 p-5 sm:p-7 rounded-2xl sm:rounded-3xl text-center space-y-3 card-hover overflow-hidden hover:border-amber-500/20 transition-all duration-500 spotlight-card" >
                 <div className="absolute inset-0 bg-gradient-to-b from-amber-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
                 <div className="relative flex justify-center">{stat.icon}</div>
                 <span className="relative block text-2xl sm:text-4xl font-black text-white tracking-tight">
@@ -428,7 +424,7 @@ export default function Home({ setCurrentPage, user }: HomeProps) {
           ].map((testimonial, idx) => (
             <ScrollReveal key={idx} delay={idx} direction="up">
               <TiltCard className="h-full" maxTilt={3}>
-                <div className="relative bg-slate-900/30 border border-slate-800/60 p-6 sm:p-8 rounded-2xl sm:rounded-3xl space-y-5 hover:border-amber-500/20 transition-all duration-500 card-hover overflow-hidden spotlight-card h-full" onMouseMove={handleCardMouseMove}>
+                <div className="relative bg-slate-900/30 border border-slate-800/60 p-6 sm:p-8 rounded-2xl sm:rounded-3xl space-y-5 hover:border-amber-500/20 transition-all duration-500 card-hover overflow-hidden spotlight-card h-full" >
                   {/* Quote mark */}
                   <div className="absolute top-4 right-5 text-6xl text-amber-500/10 font-serif leading-none select-none">&ldquo;</div>
                   

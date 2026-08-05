@@ -25,24 +25,9 @@ export function deriveRole(email: string, storedRole?: string): 'admin' | 'clien
 }
 
 /**
- * Clean a name for fuzzy matching — removes titles, parenthetical content,
- * and non-alphanumeric characters, then lowercases.
- */
-export function cleanName(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/dr\.?/gi, '')
-    .replace(/msc\.?/gi, '')
-    .replace(/phd\.?/gi, '')
-    .replace(/bsc\.?/gi, '')
-    .replace(/\(.*\)/g, '')
-    .replace(/[^a-z0-9]/g, '')
-    .trim();
-}
-
-/**
  * Check if an order is accessible to a given expert.
- * Matches by email, cleaned name, or if the order is unassigned.
+ * Matches by assigned_to name (exact match, case-insensitive) or by email.
+ * exact match, case-insensitive) or by email.
  */
 export function isOrderAccessibleToExpert(
   order: { assigned_to?: string; client_email?: string },
@@ -52,17 +37,26 @@ export function isOrderAccessibleToExpert(
   if (!order.assigned_to || order.assigned_to.trim() === '' || order.assigned_to === 'Unallocated') {
     return true;
   }
-  const cleanAssigned = cleanName(order.assigned_to);
-  const cleanExpert = cleanName(expertFullName);
-  if (cleanAssigned === cleanExpert) return true;
+  // Exact email match (most reliable)
   if (order.assigned_to.toLowerCase() === expertEmail.toLowerCase()) return true;
-  if (cleanAssigned && cleanExpert && (cleanAssigned.includes(cleanExpert) || cleanExpert.includes(cleanAssigned))) return true;
+  // Exact name match (case-insensitive, preserves spaces/punctuation)
+  if (order.assigned_to.toLowerCase().trim() === expertFullName.toLowerCase().trim()) return true;
   return false;
 }
 
 /** Generate a collision-resistant payment ID. */
 export function generatePaymentId(): string {
   return 'pay-' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+}
+
+/**
+ * Returns the admin commission percentage from ADMIN_CUT_PERCENT env var.
+ * Defaults to 10 if not set or invalid. Clamped to 0–100.
+ */
+export function getAdminCutPercent(): number {
+  const raw = Number(process.env.ADMIN_CUT_PERCENT);
+  if (isNaN(raw) || raw < 0) return 10;
+  return Math.min(raw, 100);
 }
 
 /**
@@ -81,12 +75,27 @@ export async function getRequesterProfile(req: Request): Promise<{
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.slice(7);
     if (token) {
-      const { supabase } = await import('./supabase.js');
+      const { supabase, db } = await import('./supabase.js');
       const { data: { user: authUser }, error } = await supabase.auth.getUser(token);
       if (error || !authUser) return null;
       const email = authUser.email?.toLowerCase().trim();
       if (!email) return null;
-      const role = deriveRole(email, authUser.user_metadata?.role);
+
+      // Check profiles table for the authoritative role — the JWT user_metadata
+      // may be stale if the user was recently approved as expert but hasn't refreshed
+      // their session yet.
+      let effectiveRole = authUser.user_metadata?.role;
+      try {
+        const { data: profile } = await db
+          .from('profiles').select('role, expert_status').eq('id', authUser.id).maybeSingle();
+        if (profile?.role) effectiveRole = profile.role;
+        // If profile was approved as expert but role column was never updated, treat as expert
+        if (profile?.expert_status === 'approved' && effectiveRole !== 'expert') {
+          effectiveRole = 'expert';
+        }
+      } catch { /* profiles table may not exist yet */ }
+
+      const role = deriveRole(email, effectiveRole);
       return {
         id: authUser.id,
         email,
@@ -143,16 +152,16 @@ export function paymentConfig() {
     ],
     ethiopia: {
       cbe: {
-        accountNumber: process.env.CBE_ACCOUNT_NUMBER || '1000123456789',
-        accountName: process.env.CBE_ACCOUNT_NAME || 'Ace Scholar Services',
+        accountNumber: process.env.CBE_ACCOUNT_NUMBER || '',
+        accountName: process.env.CBE_ACCOUNT_NAME || '',
       },
       telebirr: {
-        number: process.env.TELEBIRR_NUMBER || '+251911223344',
-        name: process.env.TELEBIRR_NAME || 'Ace Scholar Services',
+        number: process.env.TELEBIRR_NUMBER || '',
+        name: process.env.TELEBIRR_NAME || '',
       },
       boa: {
-        accountNumber: process.env.BOA_ACCOUNT_NUMBER || '0123456789101',
-        accountName: process.env.BOA_ACCOUNT_NAME || 'Ace Scholar Services',
+        accountNumber: process.env.BOA_ACCOUNT_NUMBER || '',
+        accountName: process.env.BOA_ACCOUNT_NAME || '',
       },
     },
     crypto: {

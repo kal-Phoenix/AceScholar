@@ -1,7 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { LayoutDashboard, FileText, Clock, AlertCircle, RefreshCw, Send, CheckCircle2, MessageSquare, Download, HelpCircle, GraduationCap, Check, X, Upload, Trash2, Paperclip } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { LayoutDashboard, FileText, Clock, AlertCircle, RefreshCw, Send, CheckCircle2, MessageSquare, Download, HelpCircle, GraduationCap, Check, X, Upload, Trash2, Paperclip, Sparkles, Mail } from 'lucide-react';
 import { PageType, Profile, Order as AcademicOrder, Message } from '../types';
 import { fallbackDb, getAuthHeaders } from '../lib/supabase';
+import {
+  DOWNPAYMENT_THRESHOLD_USD, POLLING_INTERVAL_MS, REVISION_DEADLINE_MS,
+  HOURS_DIVISOR, LOCAL_STORAGE_USER_KEY,
+} from '../lib/constants';
 
 interface DashboardProps {
   user: Profile | null;
@@ -14,6 +18,16 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
   const [orders, setOrders] = useState<AcademicOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<AcademicOrder | null>(null);
+
+  const getUsdAmount = (budgetRange?: string): number => {
+    if (!budgetRange) return 0;
+    const match = budgetRange.match(/\$(\d+)/);
+    return match ? parseInt(match[1]) : 0;
+  };
+
+  const requiresDownpayment = (order: AcademicOrder): boolean => {
+    return getUsdAmount(order.budget_range) >= DOWNPAYMENT_THRESHOLD_USD;
+  };
   
   // Chat state
   const [messages, setMessages] = useState<Message[]>([]);
@@ -24,6 +38,11 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
   const [revisionGuidelines, setRevisionGuidelines] = useState('');
   const [showRevisionForm, setShowRevisionForm] = useState(false);
   const [activeTab, setActiveTab] = useState<'status' | 'chat' | 'specs' | 'payment'>('status');
+
+  // Dispute state
+  const [showDisputeForm, setShowDisputeForm] = useState(false);
+  const [disputeReason, setDisputeReason] = useState('');
+  const [isSubmittingDispute, setIsSubmittingDispute] = useState(false);
 
   // Payment proof states
   const [paymentMethodType, setPaymentMethodType] = useState<'ethiopia' | 'crypto' | 'card'>('ethiopia');
@@ -38,6 +57,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
   // Become an Expert Modal State
   const [showBecomeExpertModal, setShowBecomeExpertModal] = useState(false);
   const [isSubmittingExpert, setIsSubmittingExpert] = useState(false);
+  const [expertStep, setExpertStep] = useState(0);
   const [expertQualification, setExpertQualification] = useState("Master's Degree");
   const [expertSubjects, setExpertSubjects] = useState<string[]>([]);
   const [expertWhatsapp, setExpertWhatsapp] = useState('');
@@ -46,6 +66,15 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
   const [expertGpa, setExpertGpa] = useState('');
   const [expertDocuments, setExpertDocuments] = useState<Array<{ name: string; size?: number; type?: string; content?: string }>>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [expertInstitution, setExpertInstitution] = useState('');
+  const [expertGradYear, setExpertGradYear] = useState('');
+  const [expertFieldOfStudy, setExpertFieldOfStudy] = useState('');
+  const [expertSoftware, setExpertSoftware] = useState<string[]>([]);
+  const [expertExperience, setExpertExperience] = useState('');
+  const [expertLanguages, setExpertLanguages] = useState('');
+  const [expertPortfolioUrl, setExpertPortfolioUrl] = useState('');
+  const [expertAvailability, setExpertAvailability] = useState('');
+  const [expertReferral, setExpertReferral] = useState('');
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -136,7 +165,27 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
     'Advanced Mathematics',
     'Academic Writing & Literature',
     'STEM Problem Sets',
-    'Business & Economics'
+    'Business & Economics',
+    'Physics & Quantum Mechanics',
+    'Chemistry & Biochemistry',
+    'Law & Legal Studies',
+    'Medicine & Nursing',
+    'Psychology & Social Sciences',
+    'Statistics & Data Science',
+  ];
+
+  const SOFTWARE_OPTIONS = [
+    'MATLAB', 'Python', 'R Studio', 'SPSS', 'LaTeX', 'SolidWorks',
+    'AutoCAD', 'Arduino', 'Java', 'C++', 'JavaScript', 'Tableau',
+    'Excel (Advanced)', 'Stata', 'Simulink', 'LabVIEW',
+  ];
+
+  const EXPERIENCE_OPTIONS = [
+    'Less than 1 year', '1-2 years', '3-5 years', '5-10 years', '10+ years',
+  ];
+
+  const AVAILABILITY_OPTIONS = [
+    '5-10 hours/week', '10-20 hours/week', '20-30 hours/week', '30-40 hours/week', 'Full-time (40+)',
   ];
 
   useEffect(() => {
@@ -183,7 +232,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
     try {
       const res = await fetch('/api/profiles/become-expert', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
         body: JSON.stringify({
           id: user.id,
           full_name: user.full_name,
@@ -194,13 +243,23 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
           subjects: expertSubjects,
           proposal: expertProposal,
           gpa: expertGpa,
-          documents: expertDocuments
+          documents: expertDocuments,
+          institution: expertInstitution,
+          graduation_year: expertGradYear,
+          field_of_study: expertFieldOfStudy,
+          software: expertSoftware,
+          experience: expertExperience,
+          languages: expertLanguages,
+          portfolio_url: expertPortfolioUrl,
+          availability: expertAvailability,
+          referral: expertReferral,
         })
       });
 
       if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'Failed to upgrade to academic expert.');
+        let errData: any = {};
+        try { errData = await res.json(); } catch { /* response may not be JSON */ }
+        throw new Error(errData.error || `Request failed (${res.status})`);
       }
 
       const data = await res.json();
@@ -212,7 +271,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
         if (setUser) {
           setUser(updatedProfile);
         } else {
-          localStorage.setItem('ace_scholar_current_user', JSON.stringify(updatedProfile));
+          localStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(updatedProfile));
         }
 
         setShowBecomeExpertModal(false);
@@ -221,13 +280,12 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
       }
     } catch (err: any) {
       console.error('Error in become expert action:', err);
-      if (showToast) showToast(err.message || 'Error occurred while registering as expert.', 'error');
+      const msg = err instanceof Error ? err.message : String(err);
+      if (showToast) showToast(msg || 'Error occurred while registering as expert.', 'error');
     } finally {
       setIsSubmittingExpert(false);
     }
   };
-
-  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const fetchClientData = async () => {
     if (!user) return;
@@ -284,14 +342,9 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
     if (!selectedOrder) return;
     const interval = setInterval(() => {
       fetchMessagesForOrder(selectedOrder.id);
-    }, 5000);
+    }, POLLING_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [selectedOrder?.id]);
-
-  // Scroll to bottom of chat whenever messages list updates
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
 
   const downloadDeliveryFile = (url: string, fileName: string) => {
     try {
@@ -368,36 +421,76 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
     e.preventDefault();
     if (!revisionGuidelines.trim() || !selectedOrder || !user) return;
 
+    const currentCount = selectedOrder.revision_count || 0;
+    const maxRevisions = selectedOrder.max_revisions || 2;
+
+    if (currentCount >= maxRevisions) {
+      if (showToast) showToast(`You have used all ${maxRevisions} free revisions. Contact support for additional revisions.`, 'error');
+      return;
+    }
+
+    // Check if revision window is still open (within 48 hours of delivery)
+    if (selectedOrder.revision_deadline) {
+      const deadline = new Date(selectedOrder.revision_deadline);
+      if (new Date() > deadline) {
+        if (showToast) showToast('Revision window has expired (48 hours after delivery).', 'error');
+        return;
+      }
+    }
+
     try {
-      // Use targeted PUT endpoint for revision status update
+      const newCount = currentCount + 1;
+      // Set new revision deadline: 48 hours from now for each revision
+      const newDeadline = new Date(Date.now() + REVISION_DEADLINE_MS).toISOString();
+
       const updated = await fallbackDb.updateOrder(selectedOrder.id, {
         status: 'revision_requested',
-        internal_notes: `Revision Requested on ${new Date().toLocaleDateString()}: ${revisionGuidelines.slice(0, 80)}...`
+        revision_count: newCount,
+        revision_deadline: newDeadline,
+        internal_notes: `Revision #${newCount} Requested on ${new Date().toLocaleDateString()}: ${revisionGuidelines.slice(0, 80)}...`
       });
 
-      // 2. Post revision message to chat
-      const sent = await fallbackDb.postMessage({
-        order_id: selectedOrder.id,
-        sender_id: user.id,
-        sender_name: user.full_name,
-        content: `⚠️ [REVISION REQUEST SUBMITTED] Guidelines: "${revisionGuidelines}"`,
-        is_admin: false,
-      });
-
-      // Refresh frontend views
       if (updated) {
         setOrders(prev => prev.map(o => o.id === selectedOrder.id ? updated : o));
         setSelectedOrder(updated);
       }
-      if (sent) setMessages(prev => [...prev, sent]);
 
       setRevisionGuidelines('');
       setShowRevisionForm(false);
-      if (showToast) showToast('Revision guidelines submitted to your specialist!', 'success');
+      if (showToast) showToast(`Revision #${newCount} submitted. You have ${maxRevisions - newCount} remaining revisions.`, 'success');
 
     } catch (e) {
       console.error('Failed to submit revision:', e);
       if (showToast) showToast('Failed to submit revision guidelines.', 'error');
+    }
+  };
+
+  const handleSubmitDispute = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!disputeReason.trim() || !selectedOrder || !user) return;
+
+    setIsSubmittingDispute(true);
+    try {
+      const updated = await fallbackDb.updateOrder(selectedOrder.id, {
+        dispute_status: 'open',
+        dispute_reason: disputeReason.trim(),
+        dispute_created_at: new Date().toISOString(),
+      });
+
+      if (updated) {
+        setOrders(prev => prev.map(o => o.id === selectedOrder.id ? updated : o));
+        setSelectedOrder(updated);
+      }
+
+      setDisputeReason('');
+      setShowDisputeForm(false);
+      if (showToast) showToast('Dispute submitted. Our team will review it within 24 hours.', 'success');
+
+    } catch (e) {
+      console.error('Failed to submit dispute:', e);
+      if (showToast) showToast('Failed to submit dispute.', 'error');
+    } finally {
+      setIsSubmittingDispute(false);
     }
   };
 
@@ -445,19 +538,6 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
       }
 
       if (showToast) showToast('Payment proof submitted successfully! Awaiting coordinator approval.', 'success');
-
-      // Post notification to chat
-      const bankLabel = paymentMethodType === 'crypto'
-        ? 'USDT/Bitcoin (Crypto)'
-        : ethiopianBank === 'cbe' ? 'CBE (Commercial Bank of Ethiopia)'
-        : ethiopianBank === 'telebirr' ? 'Telebirr Mobile Wallet'
-        : 'BOA (Bank of Abyssinia)';
-      await fallbackDb.postMessage({
-        order_id: selectedOrder.id,
-        sender_name: 'System Log',
-        content: `📤 Client submitted payment screenshot proof via ${bankLabel}. Waiting for admin verification.`,
-        is_admin: false,
-      });
 
       // Clear states & Refresh
       setPaymentScreenshot('');
@@ -510,6 +590,24 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
           </span>
         );
     }
+  };
+
+  const getPaymentBadge = (order: AcademicOrder) => {
+    if (order.payment_status === 'approved') {
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+          <Check className="w-2.5 h-2.5 mr-0.5" /> Paid Upfront
+        </span>
+      );
+    }
+    if (order.special_instructions?.includes('Pay Upon Delivery')) {
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-sky-500/15 text-sky-400 border border-sky-500/30">
+          Pay on Delivery
+        </span>
+      );
+    }
+    return null;
   };
 
   if (!user) {
@@ -725,15 +823,29 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               {orders.map((o) => {
-                const hoursLeft = (new Date(o.deadline).getTime() - Date.now()) / 3600000;
+                const hoursLeft = (new Date(o.deadline).getTime() - Date.now()) / HOURS_DIVISOR;
                 const isUrgent = hoursLeft < 24 && o.status !== 'delivered';
                 const hasScreenshots = (o.admin_screenshots?.length || 0) > 0;
+
+                const progressPercent =
+                  o.status === 'delivered' ? 100 :
+                  o.status === 'under_review' ? 75 :
+                  o.status === 'in_progress' ? 50 :
+                  o.status === 'revision_requested' ? 60 :
+                  o.payment_status === 'approved' ? 25 : 10;
+
+                const statusLabel =
+                  o.status === 'delivered' ? 'Delivered' :
+                  o.status === 'under_review' ? 'Quality Review' :
+                  o.status === 'in_progress' ? 'Expert Writing' :
+                  o.status === 'revision_requested' ? 'Revision in Progress' :
+                  o.payment_status === 'approved' ? 'Awaiting Expert' : 'Order Received';
 
                 return (
                   <div
                     key={o.id}
                     onClick={() => setSelectedOrder(o)}
-                    className={`bg-slate-900/80 hover:bg-slate-900 border hover:border-amber-500/40 p-5 rounded-2xl transition-all shadow-md flex flex-col justify-between space-y-4 cursor-pointer select-none group relative overflow-hidden ${
+                    className={`bg-slate-900/80 hover:bg-slate-900 border hover:border-amber-500/40 p-5 rounded-2xl transition-all shadow-md flex flex-col justify-between space-y-3.5 cursor-pointer select-none group relative overflow-hidden ${
                       o.status === 'delivered' ? 'border-emerald-500/30' :
                       o.status === 'under_review' ? 'border-purple-500/30' :
                       o.status === 'in_progress' ? 'border-blue-500/20' :
@@ -752,7 +864,10 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                     <div className="space-y-3 pl-2">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-xs font-bold font-mono text-amber-500">{o.id}</span>
-                        {getStatusBadge(o.status)}
+                        <div className="flex items-center gap-1.5">
+                          {getPaymentBadge(o)}
+                          {getStatusBadge(o.status)}
+                        </div>
                       </div>
 
                       <div className="space-y-1">
@@ -762,6 +877,26 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                         <p className="text-xs text-slate-400 font-light">{o.service_type}</p>
                       </div>
 
+                      {/* Progress */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-slate-300">{statusLabel}</span>
+                          <span className="text-[10px] font-mono text-slate-500">{progressPercent}%</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${
+                              o.status === 'delivered' ? 'bg-emerald-500' :
+                              o.status === 'under_review' ? 'bg-purple-500' :
+                              o.status === 'in_progress' ? 'bg-blue-500' :
+                              o.status === 'revision_requested' ? 'bg-amber-500' :
+                              o.payment_status === 'approved' ? 'bg-cyan-500' : 'bg-slate-600'
+                            }`}
+                            style={{ width: `${progressPercent}%` }}
+                          />
+                        </div>
+                      </div>
+
                       {hasScreenshots && (
                         <div className="flex items-center gap-1.5 bg-purple-500/10 border border-purple-500/20 rounded-lg px-2 py-1">
                           <span className="h-1.5 w-1.5 rounded-full bg-purple-400 animate-pulse" />
@@ -769,7 +904,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                         </div>
                       )}
 
-                      <div className="pt-3 border-t border-slate-800/60 grid grid-cols-2 gap-2 text-[11px] text-slate-400">
+                      <div className="pt-2 border-t border-slate-800/60 grid grid-cols-2 gap-2 text-[11px] text-slate-400">
                         <div>
                           <span className="block text-[9px] text-slate-500 uppercase tracking-wider font-semibold">Level</span>
                           <span className="font-medium text-slate-300">{o.academic_level}</span>
@@ -783,7 +918,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                       </div>
                     </div>
 
-                    <div className="pt-3.5 border-t border-slate-800/60 flex items-center justify-between gap-2 pl-2">
+                    <div className="pt-3 border-t border-slate-800/60 flex items-center justify-between gap-2 pl-2">
                       <span className="text-xs font-bold text-amber-400 font-mono bg-amber-400/5 px-2 py-1 rounded border border-amber-400/10 truncate">
                         {o.budget_range?.split('(')[0]?.trim() || o.budget_range}
                       </span>
@@ -894,225 +1029,327 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
 
                     {/* Highly polished Visual Timeline */}
                     <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-6 sm:p-8">
-                      {/* Desktop Horizontal Stepper */}
-                      <div className="hidden md:flex items-center justify-between relative w-full">
-                        {/* Connecting track line */}
-                        <div className="absolute top-[18px] left-[5%] right-[5%] h-1 bg-slate-800 -z-0">
-                          <div 
-                            className="h-full bg-amber-500 transition-all duration-500"
-                            style={{
-                              width: 
-                                selectedOrder.status === 'delivered' ? '100%' :
-                                selectedOrder.status === 'under_review' ? '75%' :
-                                selectedOrder.status === 'revision_requested' ? '55%' :
-                                selectedOrder.status === 'in_progress' ? '50%' :
-                                selectedOrder.payment_status === 'approved' ? '25%' : '0%'
-                            }}
-                          />
-                        </div>
+                      {(() => {
+                        const needsPay = selectedOrder ? requiresDownpayment(selectedOrder) : true;
+                        const progressWidth =
+                          selectedOrder.status === 'delivered' ? '100%' :
+                          selectedOrder.status === 'under_review' ? '75%' :
+                          selectedOrder.status === 'in_progress' ? (needsPay ? '50%' : '62%') :
+                          selectedOrder.payment_status === 'approved' ? (needsPay ? '25%' : '33%') : '0%';
 
-                        {/* Step 1: Placed */}
-                        <div className="flex flex-col items-center text-center w-1/5 z-10">
-                          <div className="h-10 w-10 rounded-full flex items-center justify-center bg-amber-500 text-[#0F172A] font-bold border-4 border-slate-900 transition-all">
-                            <Check className="h-5 w-5 stroke-[3]" />
-                          </div>
-                          <span className="text-[11px] font-bold text-white mt-2.5">1. Order Placed</span>
-                          <span className="text-[9px] text-slate-400 font-light mt-0.5">Specs accepted</span>
-                        </div>
+                        return (
+                          <>
+                            {/* Desktop Horizontal Stepper */}
+                            <div className={`hidden md:flex items-center justify-between relative w-full`}>
+                              {/* Connecting track line */}
+                              <div className="absolute top-[18px] left-[5%] right-[5%] h-1 bg-slate-800 -z-0">
+                                <div className="h-full bg-amber-500 transition-all duration-500" style={{ width: progressWidth }} />
+                              </div>
 
-                        {/* Step 2: Payment */}
-                        <div className="flex flex-col items-center text-center w-1/5 z-10">
-                          <div className={`h-10 w-10 rounded-full flex items-center justify-center font-bold border-4 transition-all ${
-                            selectedOrder.payment_status === 'approved'
-                              ? 'bg-amber-500 text-[#0F172A] border-slate-900'
-                              : 'bg-slate-900 text-slate-400 border-slate-800 animate-pulse'
-                          }`}>
-                            {selectedOrder.payment_status === 'approved' ? (
-                              <Check className="h-5 w-5 stroke-[3]" />
-                            ) : (
-                              <span>2</span>
-                            )}
-                          </div>
-                          <span className={`text-[11px] font-bold mt-2.5 ${selectedOrder.payment_status === 'approved' ? 'text-white' : 'text-slate-400'}`}>
-                            2. Downpayment
-                          </span>
-                          <span className="text-[9px] text-slate-400 font-light mt-0.5">
-                            {selectedOrder.payment_status === 'approved' ? 'Secured & verified' : 'Action required'}
-                          </span>
-                        </div>
+                              {/* Step 1: Placed */}
+                              <div className={`flex flex-col items-center text-center z-10 ${needsPay ? 'w-1/5' : 'w-1/4'}`}>
+                                <div className="h-10 w-10 rounded-full flex items-center justify-center bg-amber-500 text-[#0F172A] font-bold border-4 border-slate-900 transition-all">
+                                  <Check className="h-5 w-5 stroke-[3]" />
+                                </div>
+                                <span className="text-[11px] font-bold text-white mt-2.5">1. Order Placed</span>
+                                <span className="text-[9px] text-slate-400 font-light mt-0.5">Specs accepted</span>
+                              </div>
 
-                        {/* Step 3: Drafting */}
-                        <div className="flex flex-col items-center text-center w-1/5 z-10">
-                          <div className={`h-10 w-10 rounded-full flex items-center justify-center font-bold border-4 transition-all ${
-                            selectedOrder.status === 'delivered'
-                              ? 'bg-amber-500 text-[#0F172A] border-slate-900'
-                              : selectedOrder.payment_status === 'approved'
-                              ? 'bg-amber-500/10 text-amber-400 border-amber-500/50 animate-pulse'
-                              : 'bg-slate-900 text-slate-500 border-slate-800'
-                          }`}>
-                            {selectedOrder.status === 'delivered' ? (
-                              <Check className="h-5 w-5 stroke-[3]" />
-                            ) : (
-                              <span>3</span>
-                            )}
-                          </div>
-                          <span className={`text-[11px] font-bold mt-2.5 ${
-                            selectedOrder.status === 'delivered' || selectedOrder.payment_status === 'approved'
-                              ? 'text-white' : 'text-slate-500'
-                          }`}>
-                            3. Expert Writing
-                          </span>
-                          <span className="text-[9px] text-slate-400 font-light mt-0.5">
-                            {selectedOrder.status === 'delivered' ? 'Drafting finished' : selectedOrder.payment_status === 'approved' ? 'In progress' : 'Awaiting payment'}
-                          </span>
-                        </div>
+                              {/* Step 2: Payment (only if needed) */}
+                              {needsPay && (
+                                <div className="flex flex-col items-center text-center w-1/5 z-10">
+                                  <div className={`h-10 w-10 rounded-full flex items-center justify-center font-bold border-4 transition-all ${
+                                    selectedOrder.payment_status === 'approved'
+                                      ? 'bg-amber-500 text-[#0F172A] border-slate-900'
+                                      : 'bg-slate-900 text-slate-400 border-slate-800 animate-pulse'
+                                  }`}>
+                                    {selectedOrder.payment_status === 'approved' ? (
+                                      <Check className="h-5 w-5 stroke-[3]" />
+                                    ) : (
+                                      <span>2</span>
+                                    )}
+                                  </div>
+                                  <span className={`text-[11px] font-bold mt-2.5 ${selectedOrder.payment_status === 'approved' ? 'text-white' : 'text-slate-400'}`}>
+                                    2. Downpayment
+                                  </span>
+                                  <span className="text-[9px] text-slate-400 font-light mt-0.5">
+                                    {selectedOrder.payment_status === 'approved' ? 'Secured & verified' : 'Action required'}
+                                  </span>
+                                </div>
+                              )}
 
-                        {/* Step 4: Quality Check */}
-                        <div className="flex flex-col items-center text-center w-1/5 z-10">
-                          <div className={`h-10 w-10 rounded-full flex items-center justify-center font-bold border-4 transition-all ${
-                            selectedOrder.status === 'delivered'
-                              ? 'bg-amber-500 text-[#0F172A] border-slate-900'
-                              : selectedOrder.status === 'under_review'
-                              ? 'bg-amber-500/10 text-amber-400 border-amber-500/50 animate-pulse'
-                              : 'bg-slate-900 text-slate-500 border-slate-800'
-                          }`}>
-                            {selectedOrder.status === 'delivered' ? (
-                              <Check className="h-5 w-5 stroke-[3]" />
-                            ) : (
-                              <span>4</span>
-                            )}
-                          </div>
-                          <span className={`text-[11px] font-bold mt-2.5 ${
-                            selectedOrder.status === 'delivered' || selectedOrder.status === 'under_review'
-                              ? 'text-white' : 'text-slate-500'
-                          }`}>
-                            4. Internal QA
-                          </span>
-                          <span className="text-[9px] text-slate-400 font-light mt-0.5">
-                            {selectedOrder.status === 'delivered' ? 'Review complete' : selectedOrder.status === 'under_review' ? 'Under QA check' : 'Pending draft'}
-                          </span>
-                        </div>
+                              {/* Step 3: Drafting */}
+                              <div className={`flex flex-col items-center text-center z-10 ${needsPay ? 'w-1/5' : 'w-1/4'}`}>
+                                <div className={`h-10 w-10 rounded-full flex items-center justify-center font-bold border-4 transition-all ${
+                                  selectedOrder.status === 'delivered'
+                                    ? 'bg-amber-500 text-[#0F172A] border-slate-900'
+                                    : selectedOrder.status === 'in_progress'
+                                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/50 animate-pulse'
+                                    : 'bg-slate-900 text-slate-500 border-slate-800'
+                                }`}>
+                                  {selectedOrder.status === 'delivered' ? (
+                                    <Check className="h-5 w-5 stroke-[3]" />
+                                  ) : (
+                                    <span>{needsPay ? '3' : '2'}</span>
+                                  )}
+                                </div>
+                                <span className={`text-[11px] font-bold mt-2.5 ${
+                                  selectedOrder.status === 'delivered' || selectedOrder.status === 'in_progress'
+                                    ? 'text-white' : 'text-slate-500'
+                                }`}>
+                                  {needsPay ? '3. Expert Writing' : '2. Expert Writing'}
+                                </span>
+                                <span className="text-[9px] text-slate-400 font-light mt-0.5">
+                                  {selectedOrder.status === 'delivered' ? 'Drafting finished' : selectedOrder.status === 'in_progress' ? 'In progress' : 'Awaiting assignment'}
+                                </span>
+                              </div>
 
-                        {/* Step 5: Ready */}
-                        <div className="flex flex-col items-center text-center w-1/5 z-10">
-                          <div className={`h-10 w-10 rounded-full flex items-center justify-center font-bold border-4 transition-all ${
-                            selectedOrder.status === 'delivered'
-                              ? 'bg-emerald-500 text-[#0F172A] border-slate-900 shadow-lg shadow-emerald-500/20'
-                              : 'bg-slate-900 text-slate-500 border-slate-800'
-                          }`}>
-                            {selectedOrder.status === 'delivered' ? (
-                              <CheckCircle2 className="h-5 w-5" />
-                            ) : (
-                              <span>5</span>
-                            )}
-                          </div>
-                          <span className={`text-[11px] font-bold mt-2.5 ${selectedOrder.status === 'delivered' ? 'text-emerald-400' : 'text-slate-500'}`}>
-                            5. Delivered
-                          </span>
-                          <span className="text-[9px] text-slate-400 font-light mt-0.5">
-                            {selectedOrder.status === 'delivered' ? 'Ready to download' : 'Awaiting review'}
-                          </span>
-                        </div>
-                      </div>
+                              {/* Step 4: Quality Check */}
+                              <div className={`flex flex-col items-center text-center z-10 ${needsPay ? 'w-1/5' : 'w-1/4'}`}>
+                                <div className={`h-10 w-10 rounded-full flex items-center justify-center font-bold border-4 transition-all ${
+                                  selectedOrder.status === 'delivered'
+                                    ? 'bg-amber-500 text-[#0F172A] border-slate-900'
+                                    : selectedOrder.status === 'under_review'
+                                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/50 animate-pulse'
+                                    : 'bg-slate-900 text-slate-500 border-slate-800'
+                                }`}>
+                                  {selectedOrder.status === 'delivered' ? (
+                                    <Check className="h-5 w-5 stroke-[3]" />
+                                  ) : (
+                                    <span>{needsPay ? '4' : '3'}</span>
+                                  )}
+                                </div>
+                                <span className={`text-[11px] font-bold mt-2.5 ${
+                                  selectedOrder.status === 'delivered' || selectedOrder.status === 'under_review'
+                                    ? 'text-white' : 'text-slate-500'
+                                }`}>
+                                  {needsPay ? '4. Internal QA' : '3. Internal QA'}
+                                </span>
+                                <span className="text-[9px] text-slate-400 font-light mt-0.5">
+                                  {selectedOrder.status === 'delivered' ? 'Review complete' : selectedOrder.status === 'under_review' ? 'Under QA check' : 'Pending draft'}
+                                </span>
+                              </div>
+
+                              {/* Step 5: Ready */}
+                              <div className={`flex flex-col items-center text-center z-10 ${needsPay ? 'w-1/5' : 'w-1/4'}`}>
+                                <div className={`h-10 w-10 rounded-full flex items-center justify-center font-bold border-4 transition-all ${
+                                  selectedOrder.status === 'delivered'
+                                    ? 'bg-emerald-500 text-[#0F172A] border-slate-900 shadow-lg shadow-emerald-500/20'
+                                    : 'bg-slate-900 text-slate-500 border-slate-800'
+                                }`}>
+                                  {selectedOrder.status === 'delivered' ? (
+                                    <CheckCircle2 className="h-5 w-5" />
+                                  ) : (
+                                    <span>{needsPay ? '5' : '4'}</span>
+                                  )}
+                                </div>
+                                <span className={`text-[11px] font-bold mt-2.5 ${selectedOrder.status === 'delivered' ? 'text-emerald-400' : 'text-slate-500'}`}>
+                                  {needsPay ? '5. Delivered' : '4. Delivered'}
+                                </span>
+                                <span className="text-[9px] text-slate-400 font-light mt-0.5">
+                                  {selectedOrder.status === 'delivered' ? 'Ready to download' : 'Awaiting review'}
+                                </span>
+                              </div>
+                            </div>
+                          </>
+                        );
+                      })()}
 
                       {/* Mobile Vertical Stepper (extremely clear & readable) */}
-                      <div className="md:hidden space-y-5">
-                        <div className="flex items-start space-x-3">
-                          <div className="mt-0.5 h-6 w-6 rounded-full flex items-center justify-center bg-amber-500 text-[#0F172A] font-bold text-xs shrink-0">
-                            ✓
-                          </div>
-                          <div>
-                            <span className="block text-xs font-bold text-white">1. Order Placed & Specifications Accepted</span>
-                            <span className="block text-[10px] text-slate-400">Your specifications are successfully cataloged in our portal.</span>
-                          </div>
-                        </div>
+                      {(() => {
+                        const needsPay = selectedOrder ? requiresDownpayment(selectedOrder) : true;
+                        return (
+                          <div className="md:hidden space-y-5">
+                            <div className="flex items-start space-x-3">
+                              <div className="mt-0.5 h-6 w-6 rounded-full flex items-center justify-center bg-amber-500 text-[#0F172A] font-bold text-xs shrink-0">
+                                ✓
+                              </div>
+                              <div>
+                                <span className="block text-xs font-bold text-white">1. Order Placed & Specifications Accepted</span>
+                                <span className="block text-[10px] text-slate-400">Your specifications are successfully cataloged in our portal.</span>
+                              </div>
+                            </div>
 
-                        <div className="flex items-start space-x-3">
-                          <div className={`mt-0.5 h-6 w-6 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
-                            selectedOrder.payment_status === 'approved'
-                              ? 'bg-amber-500 text-[#0F172A]'
-                              : 'bg-slate-800 text-slate-400 animate-pulse border border-slate-700'
-                          }`}>
-                            {selectedOrder.payment_status === 'approved' ? '✓' : '2'}
-                          </div>
-                          <div>
-                            <span className={`block text-xs font-bold ${selectedOrder.payment_status === 'approved' ? 'text-white' : 'text-slate-400'}`}>
-                              2. Upfront Downpayment Verification
-                            </span>
-                            <span className="block text-[10px] text-slate-400">
-                              {selectedOrder.payment_status === 'approved' ? 'Verified. Payment reconciled securely.' : 'Awaiting payment confirmation to trigger active drafting.'}
-                            </span>
-                          </div>
-                        </div>
+                            {needsPay && (
+                              <div className="flex items-start space-x-3">
+                                <div className={`mt-0.5 h-6 w-6 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
+                                  selectedOrder.payment_status === 'approved'
+                                    ? 'bg-amber-500 text-[#0F172A]'
+                                    : 'bg-slate-800 text-slate-400 animate-pulse border border-slate-700'
+                                }`}>
+                                  {selectedOrder.payment_status === 'approved' ? '✓' : '2'}
+                                </div>
+                                <div>
+                                  <span className={`block text-xs font-bold ${selectedOrder.payment_status === 'approved' ? 'text-white' : 'text-slate-400'}`}>
+                                    2. Upfront Downpayment Verification
+                                  </span>
+                                  <span className="block text-[10px] text-slate-400">
+                                    {selectedOrder.payment_status === 'approved' ? 'Verified. Payment reconciled securely.' : 'Awaiting payment confirmation to trigger active drafting.'}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
 
-                        <div className="flex items-start space-x-3">
-                          <div className={`mt-0.5 h-6 w-6 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
-                            selectedOrder.status === 'delivered'
-                              ? 'bg-amber-500 text-[#0F172A]'
-                              : selectedOrder.payment_status === 'approved'
-                              ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 animate-pulse'
-                              : 'bg-slate-800 text-slate-500'
-                          }`}>
-                            {selectedOrder.status === 'delivered' ? '✓' : '3'}
-                          </div>
-                          <div>
-                            <span className={`block text-xs font-bold ${
-                              selectedOrder.status === 'delivered' || selectedOrder.payment_status === 'approved' ? 'text-white' : 'text-slate-500'
-                            }`}>
-                              3. Expert Academic Writing
-                            </span>
-                            <span className="block text-[10px] text-slate-400">
-                              {selectedOrder.status === 'delivered' ? 'Drafting concluded.' : selectedOrder.payment_status === 'approved' ? 'Assigned and drafting in progress.' : 'Pending downpayment verification.'}
-                            </span>
-                          </div>
-                        </div>
+                            <div className="flex items-start space-x-3">
+                              <div className={`mt-0.5 h-6 w-6 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
+                                selectedOrder.status === 'delivered'
+                                  ? 'bg-amber-500 text-[#0F172A]'
+                                  : selectedOrder.status === 'in_progress'
+                                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 animate-pulse'
+                                  : 'bg-slate-800 text-slate-500'
+                              }`}>
+                                {selectedOrder.status === 'delivered' ? '✓' : (needsPay ? '3' : '2')}
+                              </div>
+                              <div>
+                                <span className={`block text-xs font-bold ${
+                                  selectedOrder.status === 'delivered' || selectedOrder.status === 'in_progress' ? 'text-white' : 'text-slate-500'
+                                }`}>
+                                  {needsPay ? '3. Expert Academic Writing' : '2. Expert Academic Writing'}
+                                </span>
+                                <span className="block text-[10px] text-slate-400">
+                                  {selectedOrder.status === 'delivered' ? 'Drafting concluded.' : selectedOrder.status === 'in_progress' ? 'Assigned and drafting in progress.' : 'Awaiting assignment.'}
+                                </span>
+                              </div>
+                            </div>
 
-                        <div className="flex items-start space-x-3">
-                          <div className={`mt-0.5 h-6 w-6 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
-                            selectedOrder.status === 'delivered'
-                              ? 'bg-amber-500 text-[#0F172A]'
-                              : selectedOrder.status === 'under_review'
-                              ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 animate-pulse'
-                              : 'bg-slate-800 text-slate-500'
-                          }`}>
-                            {selectedOrder.status === 'delivered' ? '✓' : '4'}
-                          </div>
-                          <div>
-                            <span className={`block text-xs font-bold ${
-                              selectedOrder.status === 'delivered' || selectedOrder.status === 'under_review' ? 'text-white' : 'text-slate-500'
-                            }`}>
-                              4. Internal Quality Assurance & Review
-                            </span>
-                            <span className="block text-[10px] text-slate-400">
-                              {selectedOrder.status === 'delivered' ? 'Verified by quality panel.' : selectedOrder.status === 'under_review' ? 'Checking for plagiarism, grammar and correctness specs.' : 'Scheduled after draft completion.'}
-                            </span>
-                          </div>
-                        </div>
+                            <div className="flex items-start space-x-3">
+                              <div className={`mt-0.5 h-6 w-6 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
+                                selectedOrder.status === 'delivered'
+                                  ? 'bg-amber-500 text-[#0F172A]'
+                                  : selectedOrder.status === 'under_review'
+                                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 animate-pulse'
+                                  : 'bg-slate-800 text-slate-500'
+                              }`}>
+                                {selectedOrder.status === 'delivered' ? '✓' : (needsPay ? '4' : '3')}
+                              </div>
+                              <div>
+                                <span className={`block text-xs font-bold ${
+                                  selectedOrder.status === 'delivered' || selectedOrder.status === 'under_review' ? 'text-white' : 'text-slate-500'
+                                }`}>
+                                  {needsPay ? '4. Internal Quality Assurance & Review' : '3. Internal Quality Assurance & Review'}
+                                </span>
+                                <span className="block text-[10px] text-slate-400">
+                                  {selectedOrder.status === 'delivered' ? 'Verified by quality panel.' : selectedOrder.status === 'under_review' ? 'Checking for plagiarism, grammar and correctness specs.' : 'Scheduled after draft completion.'}
+                                </span>
+                              </div>
+                            </div>
 
-                        <div className="flex items-start space-x-3">
-                          <div className={`mt-0.5 h-6 w-6 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
-                            selectedOrder.status === 'delivered'
-                              ? 'bg-emerald-500 text-[#0F172A]'
-                              : 'bg-slate-800 text-slate-500'
-                          }`}>
-                            {selectedOrder.status === 'delivered' ? '✓' : '5'}
+                            <div className="flex items-start space-x-3">
+                              <div className={`mt-0.5 h-6 w-6 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
+                                selectedOrder.status === 'delivered'
+                                  ? 'bg-emerald-500 text-[#0F172A]'
+                                  : 'bg-slate-800 text-slate-500'
+                              }`}>
+                                {selectedOrder.status === 'delivered' ? '✓' : (needsPay ? '5' : '4')}
+                              </div>
+                              <div>
+                                <span className={`block text-xs font-bold ${selectedOrder.status === 'delivered' ? 'text-emerald-400' : 'text-slate-500'}`}>
+                                  {needsPay ? '5. Solutions Released & Delivered' : '4. Solutions Released & Delivered'}
+                                </span>
+                                <span className="block text-[10px] text-slate-400">
+                                  {selectedOrder.status === 'delivered' ? 'Clean file ready for instant secure download.' : 'Unreleased.'}
+                                </span>
+                              </div>
+                            </div>
                           </div>
-                          <div>
-                            <span className={`block text-xs font-bold ${selectedOrder.status === 'delivered' ? 'text-emerald-400' : 'text-slate-500'}`}>
-                              5. Solutions Released & Delivered
-                            </span>
-                            <span className="block text-[10px] text-slate-400">
-                              {selectedOrder.status === 'delivered' ? 'Clean file ready for instant secure download.' : 'Unreleased.'}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
+                        );
+                      })()}
                     </div>
                   </div>
 
                   {/* ACTION CARD FOR CURRENT PHASE */}
                   <div className="space-y-4">
                     <h4 className="text-xs font-extrabold text-slate-400 uppercase tracking-widest font-mono">Current Task Priority</h4>
+
+                    {(() => {
+                      const needsPayment = requiresDownpayment(selectedOrder);
+                      const steps = [
+                        { key: 'placed', label: 'Order Placed', desc: 'Specs reviewed & confirmed', done: true },
+                        ...(needsPayment ? [{ key: 'payment', label: 'Downpayment', desc: selectedOrder.payment_status === 'approved' ? 'Verified & secured' : 'Awaiting payment', done: selectedOrder.payment_status === 'approved' }] : []),
+                        { key: 'writing', label: 'Expert Writing', desc: selectedOrder.status === 'in_progress' ? 'In progress now' : selectedOrder.status === 'delivered' || selectedOrder.status === 'under_review' ? 'Completed' : 'Awaiting assignment', done: selectedOrder.status === 'delivered' || selectedOrder.status === 'under_review' },
+                        { key: 'qa', label: 'Quality Review', desc: selectedOrder.status === 'under_review' ? 'Under QA check' : selectedOrder.status === 'delivered' ? 'Approved' : 'Pending', done: selectedOrder.status === 'delivered' },
+                        { key: 'delivered', label: 'Delivered', desc: selectedOrder.status === 'delivered' ? 'Ready to download' : 'Pending', done: selectedOrder.status === 'delivered' },
+                      ];
+                      const currentIdx = steps.findIndex(s => !s.done);
+                      const activeStep = currentIdx === -1 ? steps[steps.length - 1] : steps[currentIdx];
+
+                      return (
+                        <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl overflow-hidden">
+                          {/* Header */}
+                          <div className="px-5 py-4 border-b border-slate-800/60 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${
+                                selectedOrder.status === 'delivered' ? 'bg-emerald-500/15' : 'bg-amber-500/15'
+                              }`}>
+                                {selectedOrder.status === 'delivered' ? (
+                                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                                ) : (
+                                  <Clock className="h-4 w-4 text-amber-400 animate-pulse" />
+                                )}
+                              </div>
+                              <div>
+                                <h5 className="text-sm font-bold text-white">{activeStep.label}</h5>
+                                <p className="text-[11px] text-slate-400">{activeStep.desc}</p>
+                              </div>
+                            </div>
+                            <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${
+                              selectedOrder.status === 'delivered'
+                                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                                : 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
+                            }`}>
+                              {selectedOrder.status === 'delivered' ? 'Complete' : 'In Progress'}
+                            </span>
+                          </div>
+
+                          {/* Step Progress */}
+                          <div className="px-5 py-4">
+                            <div className="flex items-center gap-1.5">
+                              {steps.map((step, i) => (
+                                <div key={step.key} className="flex-1 flex flex-col items-center gap-1.5">
+                                  <div className={`w-full h-1.5 rounded-full ${
+                                    step.done ? 'bg-amber-500' :
+                                    i === currentIdx ? 'bg-amber-500/40' : 'bg-slate-800'
+                                  }`} />
+                                  <span className={`text-[9px] font-semibold ${
+                                    step.done ? 'text-amber-400' :
+                                    i === currentIdx ? 'text-white' : 'text-slate-600'
+                                  }`}>{step.label}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Action */}
+                          {!selectedOrder.delivery_url && selectedOrder.status !== 'delivered' && (
+                            <div className="px-5 py-3 border-t border-slate-800/60 bg-slate-950/30">
+                              <p className="text-[11px] text-slate-500 leading-relaxed">
+                                {!needsPayment && selectedOrder.payment_status !== 'approved'
+                                  ? 'Your order is being processed. No downpayment required for orders under $100.'
+                                  : selectedOrder.payment_status !== 'approved'
+                                  ? 'Submit payment proof to move to the next step.'
+                                  : selectedOrder.status === 'in_progress'
+                                  ? 'Your expert is working. Updates will appear here.'
+                                  : 'Sit tight — your order is being processed.'}
+                              </p>
+                            </div>
+                          )}
+
+                          {selectedOrder.delivery_url && selectedOrder.payment_status === 'approved' && (
+                            <div className="px-5 py-3 border-t border-slate-800/60 bg-emerald-500/5">
+                              <a
+                                href={selectedOrder.delivery_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center justify-center gap-2 w-full bg-emerald-500 hover:bg-emerald-400 text-[#0F172A] font-bold py-2 rounded-xl text-xs transition-all"
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                                <span>Download Final Files</span>
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                     
                     {/* Watermarked Preview Section */}
                     {selectedOrder.preview_url && selectedOrder.payment_status !== 'approved' && (
@@ -1561,14 +1798,31 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
 
                         {/* Inline revision tools */}
                         <div className="pt-2 border-t border-slate-800/60">
+                          {/* Revision info */}
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-[10px] text-slate-500">
+                              Revisions: <span className="text-slate-300 font-bold">{selectedOrder.revision_count || 0}</span>
+                              <span className="text-slate-600"> / {selectedOrder.max_revisions || 2}</span>
+                            </span>
+                            {selectedOrder.revision_deadline && (
+                              <span className={`text-[10px] ${new Date(selectedOrder.revision_deadline) > new Date() ? 'text-emerald-400' : 'text-red-400'}`}>
+                                {new Date(selectedOrder.revision_deadline) > new Date()
+                                  ? `Revision window open until ${new Date(selectedOrder.revision_deadline).toLocaleDateString()}`
+                                  : 'Revision window expired'}
+                              </span>
+                            )}
+                          </div>
                           {!showRevisionForm ? (
                             <div className="flex justify-between items-center text-xs text-slate-400">
                               <span>Are further calculations or adjustments needed?</span>
                               <button
                                 onClick={() => setShowRevisionForm(true)}
-                                className="text-amber-400 hover:text-amber-300 font-bold underline transition-all cursor-pointer"
+                                disabled={(selectedOrder.revision_count || 0) >= (selectedOrder.max_revisions || 2)}
+                                className="text-amber-400 hover:text-amber-300 font-bold underline transition-all cursor-pointer disabled:text-slate-600 disabled:no-underline disabled:cursor-not-allowed"
                               >
-                                Request Free Project Revision
+                                {(selectedOrder.revision_count || 0) >= (selectedOrder.max_revisions || 2)
+                                  ? 'No Revisions Left'
+                                  : 'Request Free Project Revision'}
                               </button>
                             </div>
                           ) : (
@@ -1603,6 +1857,84 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                             </form>
                           )}
                         </div>
+
+                        {/* Dispute section - only show if delivered and no existing dispute */}
+                        {selectedOrder.status === 'delivered' && !selectedOrder.dispute_status && (
+                          <div className="pt-2 border-t border-slate-800/60">
+                            {!showDisputeForm ? (
+                              <div className="flex justify-between items-center text-xs text-slate-400">
+                                <span>Not satisfied with the delivered work?</span>
+                                <button
+                                  onClick={() => setShowDisputeForm(true)}
+                                  className="text-red-400 hover:text-red-300 font-bold underline transition-all cursor-pointer"
+                                >
+                                  Open Dispute
+                                </button>
+                              </div>
+                            ) : (
+                              <form onSubmit={handleSubmitDispute} className="bg-slate-950 border border-red-500/20 p-4 rounded-xl space-y-4 animate-in slide-in-from-top-2 duration-150">
+                                <div className="space-y-1">
+                                  <h6 className="text-xs font-bold text-red-400">Dispute Resolution Request</h6>
+                                  <p className="text-[11px] text-slate-400">Describe the issue with the delivered work. Our team will review within 24 hours.</p>
+                                </div>
+                                <textarea
+                                  required
+                                  rows={3}
+                                  value={disputeReason}
+                                  onChange={(e) => setDisputeReason(e.target.value)}
+                                  placeholder="Describe why the delivered work does not meet your requirements..."
+                                  className="w-full bg-slate-900 border border-slate-800 focus:border-red-500 rounded-lg py-2.5 px-3.5 text-white text-xs outline-none transition-colors resize-none font-light leading-relaxed"
+                                ></textarea>
+                                <div className="flex justify-end gap-2.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowDisputeForm(false)}
+                                    className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-400 rounded-lg text-xs transition-colors cursor-pointer"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    type="submit"
+                                    disabled={isSubmittingDispute}
+                                    className="px-4 py-2 bg-red-500 hover:bg-red-400 text-white font-bold rounded-lg text-xs transition-colors cursor-pointer disabled:opacity-50"
+                                  >
+                                    {isSubmittingDispute ? 'Submitting...' : 'Submit Dispute'}
+                                  </button>
+                                </div>
+                              </form>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Show dispute status if one exists */}
+                        {selectedOrder.dispute_status && (
+                          <div className="pt-2 border-t border-slate-800/60">
+                            <div className={`p-3 rounded-xl text-xs ${
+                              selectedOrder.dispute_status === 'resolved'
+                                ? 'bg-emerald-500/10 border border-emerald-500/20'
+                                : selectedOrder.dispute_status === 'open'
+                                ? 'bg-red-500/10 border border-red-500/20'
+                                : 'bg-amber-500/10 border border-amber-500/20'
+                            }`}>
+                              <div className="flex items-center justify-between mb-1">
+                                <span className={`font-bold ${
+                                  selectedOrder.dispute_status === 'resolved' ? 'text-emerald-400' :
+                                  selectedOrder.dispute_status === 'open' ? 'text-red-400' : 'text-amber-400'
+                                }`}>
+                                  Dispute: {selectedOrder.dispute_status === 'resolved' ? 'Resolved' : selectedOrder.dispute_status === 'open' ? 'Open' : 'Under Review'}
+                                </span>
+                                {selectedOrder.dispute_created_at && (
+                                  <span className="text-[10px] text-slate-500">
+                                    Filed {new Date(selectedOrder.dispute_created_at).toLocaleDateString()}
+                                  </span>
+                                )}
+                              </div>
+                              {selectedOrder.dispute_resolution && (
+                                <p className="text-slate-300 mt-1">{selectedOrder.dispute_resolution}</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1656,7 +1988,6 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                         </div>
                       ))
                     )}
-                    <div ref={messagesEndRef} />
                   </div>
 
                   {/* Chat Input form footer */}
@@ -1771,11 +2102,48 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
       )}
 
       {/* 4. BECOME AN EXPERT MODAL OVERLAY */}
-      {showBecomeExpertModal && (
+      {showBecomeExpertModal && (() => {
+        const STEPS = [
+          { label: 'Personal', icon: <Mail className="h-3.5 w-3.5" /> },
+          { label: 'Academic', icon: <GraduationCap className="h-3.5 w-3.5" /> },
+          { label: 'Expertise', icon: <Sparkles className="h-3.5 w-3.5" /> },
+          { label: 'Documents', icon: <Upload className="h-3.5 w-3.5" /> },
+          { label: 'Review', icon: <Check className="h-3.5 w-3.5" /> },
+        ];
+
+        const canNext = () => {
+          if (expertStep === 0) return expertWhatsapp.trim() && expertCountry.trim();
+          if (expertStep === 1) return expertGpa.trim() && expertInstitution.trim();
+          if (expertStep === 2) return expertSubjects.length > 0;
+          if (expertStep === 3) return expertDocuments.length > 0;
+          return true;
+        };
+
+        const validateAndNext = () => {
+          if (expertStep === 0) {
+            if (!expertWhatsapp.trim()) { showToast?.('Please enter your WhatsApp number.', 'error'); return; }
+            if (!expertCountry.trim()) { showToast?.('Please enter your country of residence.', 'error'); return; }
+          }
+          if (expertStep === 1) {
+            if (!expertInstitution.trim()) { showToast?.('Please enter your institution name.', 'error'); return; }
+            if (!expertGpa.trim()) { showToast?.('Please enter your GPA.', 'error'); return; }
+          }
+          if (expertStep === 2) {
+            if (expertSubjects.length === 0) { showToast?.('Please select at least one subject area.', 'error'); return; }
+          }
+          if (expertStep === 3) {
+            if (expertDocuments.length === 0) { showToast?.('Please upload at least one document.', 'error'); return; }
+          }
+          if (expertStep === 4) {
+            if (!expertProposal.trim() || expertProposal.trim().length < 20) { showToast?.('Please write a statement (min 20 chars).', 'error'); return; }
+          }
+          setExpertStep(s => Math.min(s + 1, STEPS.length - 1));
+        };
+
+        return (
         <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full max-h-[90vh] flex flex-col relative shadow-2xl animate-scale-in overflow-hidden">
-            
-            {/* Close button */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full max-h-[90vh] flex flex-col relative shadow-2xl animate-scale-in overflow-hidden">
+
             <button
               onClick={() => setShowBecomeExpertModal(false)}
               className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 hover:bg-slate-800 rounded-lg transition-colors z-10 cursor-pointer"
@@ -1783,223 +2151,333 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
               <X className="h-5 w-5" />
             </button>
 
-            <form onSubmit={handleBecomeExpertSubmit} className="flex flex-col max-h-[90vh] overflow-hidden">
-              
-              {/* Sticky Header */}
-              <div className="p-5 sm:p-6 pb-4 border-b border-slate-800 shrink-0 text-center bg-slate-900">
-                <div className="bg-emerald-500/10 text-emerald-400 p-2.5 rounded-xl inline-flex items-center justify-center mb-2">
-                  <GraduationCap className="h-5 w-5" />
-                </div>
-                <h3 className="text-lg font-bold text-white tracking-tight">Become an Academic Expert</h3>
-                <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed mt-1">
-                  Join our elite specialist panel. Complete your registration to start receiving expert tasks, STEM prompts, and professional research contracts.
-                </p>
+            {/* Step Progress Bar */}
+            <div className="px-5 sm:px-6 pt-5 pb-4 border-b border-slate-800 shrink-0 bg-slate-900">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-bold text-white">Become an Academic Expert</h3>
+                <span className="text-[10px] text-slate-500 font-mono">Step {expertStep + 1} of {STEPS.length}</span>
               </div>
+              <div className="flex gap-1.5">
+                {STEPS.map((step, i) => (
+                  <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                    <div className={`w-full h-1 rounded-full transition-colors ${
+                      i <= expertStep ? 'bg-emerald-500' : 'bg-slate-800'
+                    }`} />
+                    <span className={`text-[9px] font-bold uppercase tracking-wider ${
+                      i === expertStep ? 'text-emerald-400' : i < expertStep ? 'text-slate-400' : 'text-slate-600'
+                    }`}>{step.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
 
-              {/* Scrollable Form Body */}
-              <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
-                
-                {/* Qualification & GPA Grid */}
-                <div className="grid grid-cols-2 gap-4">
+            {/* Step Content */}
+            <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent min-h-[320px]">
+
+              {/* STEP 0: Personal Information */}
+              {expertStep === 0 && (
+                <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="bg-emerald-500/10 p-1.5 rounded-lg"><Mail className="h-4 w-4 text-emerald-400" /></div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white">Personal Information</h4>
+                      <p className="text-[10px] text-slate-500">Your basic contact details</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Full Name</label>
+                      <input type="text" value={user?.full_name || ''} disabled
+                        className="w-full bg-slate-950/50 border border-slate-800/50 rounded-xl py-2 px-3 text-slate-500 text-xs cursor-not-allowed" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Email Address</label>
+                      <input type="text" value={user?.email || ''} disabled
+                        className="w-full bg-slate-950/50 border border-slate-800/50 rounded-xl py-2 px-3 text-slate-500 text-xs cursor-not-allowed" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">WhatsApp Number *</label>
+                      <input type="text" value={expertWhatsapp} onChange={e => setExpertWhatsapp(e.target.value)}
+                        placeholder="+1 555 123 4567"
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2 px-3 text-white text-xs outline-none transition-colors" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Country of Residence *</label>
+                      <input type="text" value={expertCountry} onChange={e => setExpertCountry(e.target.value)}
+                        placeholder="e.g. United Kingdom"
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2 px-3 text-white text-xs outline-none transition-colors" />
+                    </div>
+                  </div>
                   <div>
-                    <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                      Highest Qualification
-                    </label>
-                    <select
-                      value={expertQualification}
-                      onChange={(e) => setExpertQualification(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2 px-3 text-white text-xs outline-none transition-colors cursor-pointer"
-                    >
-                      <option value="Bachelor's Degree">Bachelor's Degree</option>
-                      <option value="Master's Degree">Master's Degree</option>
-                      <option value="PhD Candidate">PhD Candidate</option>
-                      <option value="PhD / Doctorate">PhD / Doctorate</option>
-                      <option value="Other Professional Certificate">Other Professional Certificate</option>
+                    <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Languages Spoken</label>
+                    <input type="text" value={expertLanguages} onChange={e => setExpertLanguages(e.target.value)}
+                      placeholder="e.g. English, Amharic, French"
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2 px-3 text-white text-xs outline-none transition-colors" />
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 1: Academic Background */}
+              {expertStep === 1 && (
+                <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="bg-emerald-500/10 p-1.5 rounded-lg"><GraduationCap className="h-4 w-4 text-emerald-400" /></div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white">Academic Background</h4>
+                      <p className="text-[10px] text-slate-500">Your education and qualifications</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Highest Qualification *</label>
+                      <select value={expertQualification} onChange={e => setExpertQualification(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2 px-3 text-white text-xs outline-none transition-colors cursor-pointer">
+                        <option value="Bachelor's Degree">Bachelor's Degree</option>
+                        <option value="Master's Degree">Master's Degree</option>
+                        <option value="PhD Candidate">PhD Candidate</option>
+                        <option value="PhD / Doctorate">PhD / Doctorate</option>
+                        <option value="Other Professional Certificate">Other Professional Certificate</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Field of Study</label>
+                      <input type="text" value={expertFieldOfStudy} onChange={e => setExpertFieldOfStudy(e.target.value)}
+                        placeholder="e.g. Computer Science"
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2 px-3 text-white text-xs outline-none transition-colors" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Institution / University *</label>
+                    <input type="text" value={expertInstitution} onChange={e => setExpertInstitution(e.target.value)}
+                      placeholder="e.g. Addis Ababa University"
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2 px-3 text-white text-xs outline-none transition-colors" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">GPA / Class of Degree *</label>
+                      <input type="text" value={expertGpa} onChange={e => setExpertGpa(e.target.value)}
+                        placeholder="e.g. 3.85 / 4.0 or First Class"
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2 px-3 text-white text-xs outline-none transition-colors" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Graduation Year</label>
+                      <input type="text" value={expertGradYear} onChange={e => setExpertGradYear(e.target.value)}
+                        placeholder="e.g. 2024"
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2 px-3 text-white text-xs outline-none transition-colors" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Years of Experience</label>
+                    <div className="flex flex-wrap gap-2">
+                      {EXPERIENCE_OPTIONS.map(opt => (
+                        <button key={opt} type="button" onClick={() => setExpertExperience(opt)}
+                          className={`px-3 py-1.5 rounded-lg border text-[10px] font-bold transition-all cursor-pointer ${
+                            expertExperience === opt
+                              ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300'
+                              : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                          }`}>{opt}</button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 2: Expertise & Skills */}
+              {expertStep === 2 && (
+                <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="bg-emerald-500/10 p-1.5 rounded-lg"><Sparkles className="h-4 w-4 text-emerald-400" /></div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white">Expertise & Skills</h4>
+                      <p className="text-[10px] text-slate-500">What you specialize in</p>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Specialist Subject Areas * (Select all that apply)</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {SUBJECT_OPTIONS.map(sub => {
+                        const isSelected = expertSubjects.includes(sub);
+                        return (
+                          <button type="button" key={sub}
+                            onClick={() => setExpertSubjects(isSelected ? expertSubjects.filter(s => s !== sub) : [...expertSubjects, sub])}
+                            className={`flex items-center space-x-2 p-2 rounded-xl border text-left transition-all cursor-pointer ${
+                              isSelected ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300 font-semibold'
+                                : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                            }`}>
+                            <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-all ${
+                              isSelected ? 'bg-emerald-500 border-emerald-400 text-slate-950' : 'border-slate-700 bg-slate-900'
+                            }`}>
+                              {isSelected && <Check className="w-2.5 h-2.5 stroke-[3.5]" />}
+                            </div>
+                            <span className="text-[11px] font-medium leading-tight truncate">{sub}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Software & Tools Proficiency</label>
+                    <div className="flex flex-wrap gap-2">
+                      {SOFTWARE_OPTIONS.map(sw => {
+                        const isSelected = expertSoftware.includes(sw);
+                        return (
+                          <button type="button" key={sw}
+                            onClick={() => setExpertSoftware(isSelected ? expertSoftware.filter(s => s !== sw) : [...expertSoftware, sw])}
+                            className={`px-2.5 py-1.5 rounded-lg border text-[10px] font-bold transition-all cursor-pointer ${
+                              isSelected ? 'bg-sky-500/10 border-sky-500/40 text-sky-300'
+                                : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                            }`}>{sw}</button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Portfolio / LinkedIn URL</label>
+                    <input type="url" value={expertPortfolioUrl} onChange={e => setExpertPortfolioUrl(e.target.value)}
+                      placeholder="https://linkedin.com/in/yourprofile"
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2 px-3 text-white text-xs outline-none transition-colors" />
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 3: Documents */}
+              {expertStep === 3 && (
+                <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="bg-emerald-500/10 p-1.5 rounded-lg"><Upload className="h-4 w-4 text-emerald-400" /></div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white">Portfolio & Documents</h4>
+                      <p className="text-[10px] text-slate-500">Upload supporting academic documents</p>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Academic Documents * (Degrees, Transcripts, Certifications)</label>
+                    <div onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
+                      className={`border border-dashed rounded-xl p-4 text-center transition-colors ${
+                        isDragging ? 'border-emerald-500 bg-emerald-500/5' : 'border-slate-800 bg-slate-950 hover:border-slate-750'
+                      }`}>
+                      <input type="file" id="expert-doc-upload" multiple onChange={handleFileChange} className="hidden" />
+                      <label htmlFor="expert-doc-upload" className="cursor-pointer flex flex-col items-center space-y-1.5">
+                        <Upload className="h-5 w-5 text-slate-400" />
+                        <div className="text-xs text-slate-300 font-medium">
+                          Drag & drop files, or <span className="text-emerald-400 underline">browse</span>
+                        </div>
+                        <span className="text-[9px] text-slate-500">PDF, Word, PNG, JPG (Max 40MB each)</span>
+                      </label>
+                    </div>
+                    {expertDocuments.length > 0 && (
+                      <div className="mt-2.5 space-y-1.5">
+                        <span className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider">Attached ({expertDocuments.length})</span>
+                        <div className="max-h-32 overflow-y-auto space-y-1 pr-1">
+                          {expertDocuments.map((doc, idx) => (
+                            <div key={idx} className="flex items-center justify-between bg-slate-950/60 border border-slate-800 p-2 rounded-xl text-xs">
+                              <div className="flex items-center space-x-2 text-slate-300 min-w-0">
+                                <Paperclip className="h-3 w-3 text-emerald-400 shrink-0" />
+                                <span className="truncate font-mono text-[11px]">{doc.name}</span>
+                                {doc.size && <span className="text-[9px] text-slate-500 shrink-0 font-mono">({(doc.size / 1024).toFixed(1)} KB)</span>}
+                              </div>
+                              <button type="button" onClick={() => removeDocument(idx)}
+                                className="text-slate-500 hover:text-rose-400 p-1 rounded-lg hover:bg-slate-900 transition-colors cursor-pointer">
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Availability</label>
+                    <div className="flex flex-wrap gap-2">
+                      {AVAILABILITY_OPTIONS.map(opt => (
+                        <button key={opt} type="button" onClick={() => setExpertAvailability(opt)}
+                          className={`px-3 py-1.5 rounded-lg border text-[10px] font-bold transition-all cursor-pointer ${
+                            expertAvailability === opt
+                              ? 'bg-amber-500/10 border-amber-500/40 text-amber-300'
+                              : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                          }`}>{opt}</button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 4: Statement & Review */}
+              {expertStep === 4 && (
+                <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="bg-emerald-500/10 p-1.5 rounded-lg"><Check className="h-4 w-4 text-emerald-400" /></div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white">Statement & Final Review</h4>
+                      <p className="text-[10px] text-slate-500">Summary and expertise statement</p>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Statement of Academic Expertise * (Min 20 chars)</label>
+                    <textarea value={expertProposal} onChange={e => setExpertProposal(e.target.value)}
+                      placeholder="Describe your research experience, academic fields, software proficiencies, notable publications..."
+                      rows={4}
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2 px-3 text-white text-xs outline-none transition-colors resize-none" />
+                    <p className="text-[9px] text-slate-600 mt-1">{expertProposal.length} / 20 minimum characters</p>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">How did you hear about us?</label>
+                    <select value={expertReferral} onChange={e => setExpertReferral(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2 px-3 text-white text-xs outline-none transition-colors cursor-pointer">
+                      <option value="">Select...</option>
+                      <option value="google">Google Search</option>
+                      <option value="social">Social Media</option>
+                      <option value="referral">Friend / Colleague Referral</option>
+                      <option value="university">University / College</option>
+                      <option value="job_board">Job Board</option>
+                      <option value="other">Other</option>
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                      Current / Graduation GPA
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={expertGpa}
-                      onChange={(e) => setExpertGpa(e.target.value)}
-                      placeholder="e.g. 3.85 / 4.0 or First Class"
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2 px-3 text-white text-xs outline-none transition-colors"
-                    />
-                  </div>
-                </div>
 
-                {/* Subjects Checklist */}
-                <div>
-                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                    Specialist Subject Areas (Select all that apply)
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {SUBJECT_OPTIONS.map((sub) => {
-                      const isSelected = expertSubjects.includes(sub);
-                      return (
-                        <button
-                          type="button"
-                          key={sub}
-                          onClick={() => {
-                            if (isSelected) {
-                              setExpertSubjects(expertSubjects.filter(s => s !== sub));
-                            } else {
-                              setExpertSubjects([...expertSubjects, sub]);
-                            }
-                          }}
-                          className={`flex items-center space-x-2 p-2 rounded-xl border text-left transition-all cursor-pointer ${
-                            isSelected
-                              ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300 font-semibold shadow-sm'
-                              : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                          }`}
-                        >
-                          <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-all ${
-                            isSelected ? 'bg-emerald-500 border-emerald-400 text-slate-950' : 'border-slate-700 bg-slate-900'
-                          }`}>
-                            {isSelected && <Check className="w-2.5 h-2.5 stroke-[3.5]" />}
-                          </div>
-                          <span className="text-[11px] font-medium leading-tight truncate">{sub}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Contact and Country */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                      WhatsApp Number
-                    </label>
-                    <input
-                      type="text"
-                      value={expertWhatsapp}
-                      onChange={(e) => setExpertWhatsapp(e.target.value)}
-                      placeholder="+1 555 123 4567"
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2 px-3 text-white text-xs outline-none transition-colors"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                      Country of Residence
-                    </label>
-                    <input
-                      type="text"
-                      value={expertCountry}
-                      onChange={(e) => setExpertCountry(e.target.value)}
-                      placeholder="e.g. United Kingdom"
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2 px-3 text-white text-xs outline-none transition-colors"
-                    />
-                  </div>
-                </div>
-
-                {/* Supporting Academic Documents Uploader */}
-                <div>
-                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                    Supporting Academic Documents (Degrees, Transcripts, Certifications)
-                  </label>
-                  <div
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleDrop}
-                    className={`border border-dashed rounded-xl p-3 text-center transition-colors ${
-                      isDragging
-                        ? 'border-emerald-500 bg-emerald-500/5'
-                        : 'border-slate-800 bg-slate-950 hover:border-slate-750'
-                    }`}
-                  >
-                    <input
-                      type="file"
-                      id="expert-doc-upload"
-                      multiple
-                      onChange={handleFileChange}
-                      className="hidden"
-                    />
-                    <label
-                      htmlFor="expert-doc-upload"
-                      className="cursor-pointer flex flex-col items-center space-y-1.5"
-                    >
-                      <Upload className="h-5 w-5 text-slate-400" />
-                      <div className="text-xs text-slate-300 font-medium">
-                        Drag & drop academic certificates, or <span className="text-emerald-400 underline">browse files</span>
-                      </div>
-                      <span className="text-[9px] text-slate-500 block">PDF, Word, PNG, JPG, TXT</span>
-                    </label>
-                  </div>
-
-                  {/* Attached Documents List */}
-                  {expertDocuments.length > 0 && (
-                    <div className="mt-2.5 space-y-1.5">
-                      <span className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wider">
-                        Attached Files ({expertDocuments.length})
-                      </span>
-                      <div className="max-h-24 overflow-y-auto space-y-1 pr-1">
-                        {expertDocuments.map((doc, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-center justify-between bg-slate-950/60 border border-slate-800 p-2 rounded-xl text-xs"
-                          >
-                            <div className="flex items-center space-x-2 text-slate-300 min-w-0">
-                              <Paperclip className="h-3 w-3 text-emerald-400 shrink-0" />
-                              <span className="truncate font-mono text-[11px]">{doc.name}</span>
-                              {doc.size && (
-                                <span className="text-[9px] text-slate-500 shrink-0 font-mono">
-                                  ({(doc.size / 1024).toFixed(1)} KB)
-                                </span>
-                              )}
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => removeDocument(idx)}
-                              className="text-slate-500 hover:text-rose-400 p-1 rounded-lg hover:bg-slate-900 transition-colors cursor-pointer"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
+                  {/* Review Summary */}
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2.5">
+                    <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Application Summary</h5>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
+                      <span className="text-slate-500">Name</span><span className="text-white font-medium">{user?.full_name}</span>
+                      <span className="text-slate-500">Qualification</span><span className="text-white font-medium">{expertQualification}</span>
+                      <span className="text-slate-500">Institution</span><span className="text-white font-medium">{expertInstitution || '—'}</span>
+                      <span className="text-slate-500">GPA</span><span className="text-white font-medium">{expertGpa || '—'}</span>
+                      <span className="text-slate-500">Subjects</span><span className="text-white font-medium">{expertSubjects.length} selected</span>
+                      <span className="text-slate-500">Software</span><span className="text-white font-medium">{expertSoftware.length} tools</span>
+                      <span className="text-slate-500">Documents</span><span className="text-white font-medium">{expertDocuments.length} files</span>
+                      <span className="text-slate-500">Country</span><span className="text-white font-medium">{expertCountry || '—'}</span>
                     </div>
-                  )}
+                  </div>
                 </div>
+              )}
+            </div>
 
-                {/* Statement of Expertise / Proposal */}
-                <div>
-                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                    Statement of Academic Expertise (Min 20 chars)
-                  </label>
-                  <textarea
-                    value={expertProposal}
-                    onChange={(e) => setExpertProposal(e.target.value)}
-                    placeholder="Describe your research experience, academic fields, software proficiencies (e.g., MATLAB, CAD, SPSS, LaTeX) or notable publications..."
-                    rows={2}
-                    className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2 px-3 text-white text-xs outline-none transition-colors resize-none"
-                  />
-                </div>
-
-              </div>
-
-              {/* Sticky Footer */}
-              <div className="p-5 sm:p-6 border-t border-slate-800 bg-slate-900/60 shrink-0 flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowBecomeExpertModal(false)}
-                  className="flex-1 bg-slate-800 hover:bg-slate-750 text-slate-300 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer text-center"
-                >
-                  Cancel
+            {/* Footer Navigation */}
+            <div className="p-5 sm:p-6 border-t border-slate-800 bg-slate-900/60 shrink-0 flex gap-3">
+              <button type="button" onClick={() => setShowBecomeExpertModal(false)}
+                className="px-4 bg-slate-800 hover:bg-slate-750 text-slate-300 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer">
+                Cancel
+              </button>
+              {expertStep > 0 && (
+                <button type="button" onClick={() => setExpertStep(s => s - 1)}
+                  className="px-4 bg-slate-800 hover:bg-slate-750 text-slate-300 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer">
+                  Back
                 </button>
-                <button
-                  type="submit"
-                  disabled={isSubmittingExpert}
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800/40 text-white py-2.5 rounded-xl text-xs font-semibold transition-colors shadow-md shadow-emerald-950/20 cursor-pointer flex items-center justify-center space-x-1.5"
-                >
+              )}
+              {expertStep < STEPS.length - 1 ? (
+                <button type="button" onClick={validateAndNext} disabled={!canNext()}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800/40 disabled:text-slate-500 text-white py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer">
+                  Continue
+                </button>
+              ) : (
+                <button type="button" disabled={isSubmittingExpert} onClick={handleBecomeExpertSubmit}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800/40 text-white py-2.5 rounded-xl text-xs font-semibold transition-colors shadow-md shadow-emerald-950/20 cursor-pointer flex items-center justify-center space-x-1.5">
                   {isSubmittingExpert ? (
                     <>
                       <span className="animate-spin inline-block h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full mr-1.5"></span>
-                      <span>Registering...</span>
+                      <span>Submitting...</span>
                     </>
                   ) : (
                     <>
@@ -2008,12 +2486,12 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                     </>
                   )}
                 </button>
-              </div>
-
-            </form>
+              )}
+            </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
     </div>
   );

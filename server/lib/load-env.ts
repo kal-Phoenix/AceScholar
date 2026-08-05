@@ -13,6 +13,8 @@ if (fs.existsSync(envPath)) {
         (cleanVal.startsWith("'") && cleanVal.endsWith("'"))) {
       cleanVal = cleanVal.slice(1, -1);
     }
-    process.env[cleanKey] = cleanVal;
+    if (!process.env[cleanKey]) {
+      process.env[cleanKey] = cleanVal;
+    }
   });
 }

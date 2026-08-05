@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { UserPlus, Mail, Lock, User, CheckCircle2, AlertCircle, GraduationCap } from 'lucide-react';
+import { UserPlus, Mail, Lock, User, CheckCircle2, AlertCircle, GraduationCap, ArrowRight, ArrowLeft } from 'lucide-react';
 import { PageType } from '../types';
 
 interface SignupProps {
@@ -24,7 +24,7 @@ export default function Signup({ setCurrentPage, showToast }: SignupProps) {
     if (!fullName.trim()) sErrors.fullName = 'Full Name is required';
     if (!email.trim()) {
       sErrors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(email)) {
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
       sErrors.email = 'Please enter a valid email address';
     }
 
@@ -32,6 +32,8 @@ export default function Signup({ setCurrentPage, showToast }: SignupProps) {
       sErrors.password = 'Password is required';
     } else if (password.length < 8) {
       sErrors.password = 'Password must be at least 8 characters long';
+    } else if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
+      sErrors.password = 'Password must include uppercase, lowercase, and a number';
     }
 
     if (password !== confirmPassword) {
@@ -57,9 +59,9 @@ export default function Signup({ setCurrentPage, showToast }: SignupProps) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email,
+          email: email.trim(),
           password,
-          full_name: fullName
+          full_name: fullName.trim()
         })
       });
 
@@ -83,167 +85,176 @@ export default function Signup({ setCurrentPage, showToast }: SignupProps) {
   }
 
   return (
-    <div className="bg-[#0F172A] font-sans text-slate-100 min-h-[50vh] flex items-center justify-center px-4 py-8" id="signup-page-container">
+    <div className="bg-[#0F172A] font-sans text-slate-100 min-h-[60vh] flex items-center justify-center px-4 py-10" id="signup-page-container">
       
-      <div className="max-w-md w-full bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl space-y-6 relative overflow-hidden animate-fade-in-up">
+      <div className="max-w-md w-full space-y-6 animate-fade-in-up">
         
-        {/* Subtle glow */}
-        <div className="absolute top-0 left-0 w-24 h-24 bg-amber-500/5 rounded-full filter blur-xl pointer-events-none"></div>
-
         {/* Header */}
-        <div className="text-center space-y-2">
-          <div className="bg-amber-500 text-[#0F172A] p-2 rounded-lg inline-flex items-center justify-center mb-1">
-            <GraduationCap className="h-5 w-5 font-bold" />
+        <div className="text-center space-y-3">
+          <div className="bg-gradient-to-br from-amber-500 to-amber-600 text-[#0F172A] p-3 rounded-2xl inline-flex items-center justify-center shadow-lg shadow-amber-500/20">
+            <GraduationCap className="h-6 w-6 font-bold" />
           </div>
-          <h2 className="text-2xl font-bold text-white tracking-tight">Create Your Account</h2>
-          <p className="text-xs text-slate-400">Order papers and track coding assignment blueprints privately.</p>
+          <h2 className="text-3xl font-extrabold text-white tracking-tight">Create Your Account</h2>
+          <p className="text-sm text-slate-400">Join thousands of students getting expert academic support.</p>
         </div>
 
-        <form onSubmit={handleSignup} className="space-y-4">
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Full Name *</label>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-500">
-                <User className="h-4 w-4" />
-              </span>
-              <input
-                type="text"
-                required
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                placeholder="Alex Mercer"
-                className={`w-full bg-[#0F172A] border rounded-lg py-2.5 pl-10 pr-3.5 text-slate-100 text-sm focus:outline-none transition-colors ${
-                  errors.fullName ? 'border-red-500/50 focus:border-red-500' : 'border-slate-800 focus:border-amber-500'
-                }`}
-              />
+        <div className="bg-slate-900/60 border border-slate-800/80 p-7 sm:p-8 rounded-2xl shadow-2xl space-y-6 relative overflow-hidden backdrop-blur-sm">
+          
+          {/* Subtle glow */}
+          <div className="absolute top-0 left-0 w-32 h-32 bg-amber-500/5 rounded-full filter blur-2xl pointer-events-none"></div>
+
+          <form onSubmit={handleSignup} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">Full Name *</label>
+              <div className="relative group">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-4 text-slate-500 group-focus-within:text-amber-500 transition-colors">
+                  <User className="h-4 w-4" />
+                </span>
+                <input
+                  type="text"
+                  required
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Alex Mercer"
+                  className={`w-full bg-[#0F172A] border rounded-xl py-3 pl-11 pr-4 text-slate-100 text-sm focus:outline-none transition-all duration-200 placeholder:text-slate-600 ${
+                    errors.fullName ? 'border-red-500/50 focus:border-red-500' : 'border-slate-800 focus:border-amber-500'
+                  }`}
+                />
+              </div>
+              {errors.fullName && (
+                <p className="text-red-400 text-xs mt-1 flex items-center">
+                  <AlertCircle className="h-3 w-3 mr-1" />
+                  {errors.fullName}
+                </p>
+              )}
             </div>
-            {errors.fullName && (
-              <p className="text-red-400 text-[10px] mt-1 flex items-center">
-                <AlertCircle className="h-3 w-3 mr-1" />
-                {errors.fullName}
-              </p>
-            )}
-          </div>
 
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Email Address *</label>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-500">
-                <Mail className="h-4 w-4" />
-              </span>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="alex@example.com"
-                className={`w-full bg-[#0F172A] border rounded-lg py-2.5 pl-10 pr-3.5 text-slate-100 text-sm focus:outline-none transition-colors ${
-                  errors.email ? 'border-red-500/50 focus:border-red-500' : 'border-slate-800 focus:border-amber-500'
-                }`}
-              />
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">Email Address *</label>
+              <div className="relative group">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-4 text-slate-500 group-focus-within:text-amber-500 transition-colors">
+                  <Mail className="h-4 w-4" />
+                </span>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="alex@example.com"
+                  className={`w-full bg-[#0F172A] border rounded-xl py-3 pl-11 pr-4 text-slate-100 text-sm focus:outline-none transition-all duration-200 placeholder:text-slate-600 ${
+                    errors.email ? 'border-red-500/50 focus:border-red-500' : 'border-slate-800 focus:border-amber-500'
+                  }`}
+                />
+              </div>
+              {errors.email && (
+                <p className="text-red-400 text-xs mt-1 flex items-center">
+                  <AlertCircle className="h-3 w-3 mr-1" />
+                  {errors.email}
+                </p>
+              )}
             </div>
-            {errors.email && (
-              <p className="text-red-400 text-[10px] mt-1 flex items-center">
-                <AlertCircle className="h-3 w-3 mr-1" />
-                {errors.email}
-              </p>
-            )}
-          </div>
 
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Password *</label>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-500">
-                <Lock className="h-4 w-4" />
-              </span>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="•••••••• (Min 8 characters)"
-                className={`w-full bg-[#0F172A] border rounded-lg py-2.5 pl-10 pr-3.5 text-slate-100 text-sm focus:outline-none transition-colors ${
-                  errors.password ? 'border-red-500/50 focus:border-red-500' : 'border-slate-800 focus:border-amber-500'
-                }`}
-              />
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">Password *</label>
+              <div className="relative group">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-4 text-slate-500 group-focus-within:text-amber-500 transition-colors">
+                  <Lock className="h-4 w-4" />
+                </span>
+                <input
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Min 8 characters"
+                  className={`w-full bg-[#0F172A] border rounded-xl py-3 pl-11 pr-4 text-slate-100 text-sm focus:outline-none transition-all duration-200 placeholder:text-slate-600 ${
+                    errors.password ? 'border-red-500/50 focus:border-red-500' : 'border-slate-800 focus:border-amber-500'
+                  }`}
+                />
+              </div>
+              {errors.password && (
+                <p className="text-red-400 text-xs mt-1 flex items-center">
+                  <AlertCircle className="h-3 w-3 mr-1" />
+                  {errors.password}
+                </p>
+              )}
             </div>
-            {errors.password && (
-              <p className="text-red-400 text-[10px] mt-1 flex items-center">
-                <AlertCircle className="h-3 w-3 mr-1" />
-                {errors.password}
-              </p>
-            )}
-          </div>
 
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Confirm Password *</label>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-500">
-                <Lock className="h-4 w-4" />
-              </span>
-              <input
-                type="password"
-                required
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="••••••••"
-                className={`w-full bg-[#0F172A] border rounded-lg py-2.5 pl-10 pr-3.5 text-slate-100 text-sm focus:outline-none transition-colors ${
-                  errors.confirmPassword ? 'border-red-500/50 focus:border-red-500' : 'border-slate-800 focus:border-amber-500'
-                }`}
-              />
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">Confirm Password *</label>
+              <div className="relative group">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-4 text-slate-500 group-focus-within:text-amber-500 transition-colors">
+                  <Lock className="h-4 w-4" />
+                </span>
+                <input
+                  type="password"
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Re-enter your password"
+                  className={`w-full bg-[#0F172A] border rounded-xl py-3 pl-11 pr-4 text-slate-100 text-sm focus:outline-none transition-all duration-200 placeholder:text-slate-600 ${
+                    errors.confirmPassword ? 'border-red-500/50 focus:border-red-500' : 'border-slate-800 focus:border-amber-500'
+                  }`}
+                />
+              </div>
+              {errors.confirmPassword && (
+                <p className="text-red-400 text-xs mt-1 flex items-center">
+                  <AlertCircle className="h-3 w-3 mr-1" />
+                  {errors.confirmPassword}
+                </p>
+              )}
             </div>
-            {errors.confirmPassword && (
-              <p className="text-red-400 text-[10px] mt-1 flex items-center">
-                <AlertCircle className="h-3 w-3 mr-1" />
-                {errors.confirmPassword}
-              </p>
-            )}
+
+            <div className="pt-2">
+              <label className="flex items-start space-x-3 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={agreeTerms}
+                  onChange={(e) => setAgreeTerms(e.target.checked)}
+                  className="mt-0.5 rounded-lg text-amber-500 bg-slate-900 border-slate-800 focus:ring-amber-500 focus:ring-offset-0 h-4 w-4 shrink-0"
+                />
+                <span className="text-xs text-slate-400 select-none group-hover:text-slate-300 transition-colors leading-relaxed">
+                  I agree to the Terms of Service and understand that this is a premium academic assistance consult service. *
+                </span>
+              </label>
+              {errors.agreeTerms && (
+                <p className="text-red-400 text-xs mt-1.5 flex items-center">
+                  <AlertCircle className="h-3 w-3 mr-1" />
+                  {errors.agreeTerms}
+                </p>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full bg-amber-500 hover:bg-amber-400 text-[#0F172A] font-bold py-3.5 px-4 rounded-xl shadow-lg hover:shadow-amber-500/20 transition-all duration-300 flex items-center justify-center space-x-2 cursor-pointer text-sm disabled:opacity-50 active:scale-[0.98] mt-2"
+            >
+              {isLoading ? (
+                <span className="animate-spin h-4 w-4 border-2 border-[#0F172A] border-t-transparent rounded-full"></span>
+              ) : (
+                <>
+                  <UserPlus className="h-4 w-4" />
+                  <span>Create Account</span>
+                </>
+              )}
+            </button>
+          </form>
+
+          {/* Footer */}
+          <div className="text-center pt-2 text-sm text-slate-500">
+            <span>Already have an account? </span>
+            <button
+              onClick={() => {
+                setCurrentPage('login');
+              }}
+              className="text-amber-500 hover:text-amber-400 font-semibold cursor-pointer hover:underline inline-flex items-center space-x-1 transition-colors"
+            >
+              <span>Sign In</span>
+              <ArrowRight className="h-3 w-3" />
+            </button>
           </div>
 
-          <div className="pt-1">
-            <label className="flex items-start space-x-2.5 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={agreeTerms}
-                onChange={(e) => setAgreeTerms(e.target.checked)}
-                className="mt-0.5 rounded text-amber-500 bg-slate-900 border-slate-800 focus:ring-amber-500 h-4 w-4 shrink-0"
-              />
-              <span className="text-[11px] text-slate-400 select-none">
-                I agree to the Terms of Service and understand that this is a premium academic assistance consult service. *
-              </span>
-            </label>
-            {errors.agreeTerms && (
-              <p className="text-red-400 text-[10px] mt-1 flex items-center">
-                <AlertCircle className="h-3 w-3 mr-1" />
-                {errors.agreeTerms}
-              </p>
-            )}
-          </div>
-
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full bg-amber-500 hover:bg-amber-400 text-[#0F172A] font-bold py-3 px-4 rounded-lg shadow-lg hover:shadow-amber-500/10 transition-all flex items-center justify-center space-x-2 cursor-pointer text-sm disabled:opacity-50"
-          >
-            <UserPlus className="h-4 w-4" />
-            <span>{isLoading ? 'Creating Account...' : 'Create Account'}</span>
-          </button>
-        </form>
-
-        {/* Footer */}
-        <div className="text-center pt-2 text-xs text-slate-500">
-          <span>Already have an account? </span>
-          <button
-            onClick={() => {
-              setCurrentPage('login');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            className="text-amber-500 hover:underline hover:text-amber-400 font-semibold cursor-pointer"
-          >
-            Sign In
-          </button>
         </div>
-
       </div>
 
     </div>
@@ -252,7 +263,6 @@ export default function Signup({ setCurrentPage, showToast }: SignupProps) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EMAIL VERIFICATION SCREEN
-// Shown immediately after a successful signup call.
 // ─────────────────────────────────────────────────────────────────────────────
 function EmailVerificationScreen({
   email,
@@ -267,7 +277,6 @@ function EmailVerificationScreen({
   const [resendCooldown, setResendCooldown] = useState(0);
   const resendIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Clean up interval on unmount
   useEffect(() => {
     return () => {
       if (resendIntervalRef.current) {
@@ -289,7 +298,6 @@ function EmailVerificationScreen({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Failed to resend');
       if (showToast) showToast('Verification email resent! Check your inbox.', 'success');
-      // Start 60s cooldown to prevent spam
       setResendCooldown(60);
       if (resendIntervalRef.current) clearInterval(resendIntervalRef.current);
       resendIntervalRef.current = setInterval(() => {
@@ -312,84 +320,90 @@ function EmailVerificationScreen({
   };
 
   return (
-    <div className="bg-[#0F172A] font-sans text-slate-100 min-h-[50vh] flex items-center justify-center px-4 py-8" id="email-verification-screen">
-      <div className="max-w-md w-full bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl space-y-6 relative overflow-hidden">
+    <div className="bg-[#0F172A] font-sans text-slate-100 min-h-[60vh] flex items-center justify-center px-4 py-10" id="email-verification-screen">
+      <div className="max-w-md w-full space-y-6 animate-fade-in-up">
 
-        {/* Glow accents */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-48 bg-amber-500/5 rounded-full filter blur-2xl pointer-events-none" />
-
-        {/* Animated envelope icon */}
-        <div className="flex flex-col items-center space-y-4 pt-2">
-          <div className="relative">
-            <div className="bg-amber-500/15 text-amber-400 p-5 rounded-2xl ring-4 ring-amber-500/10 animate-pulse">
+        <div className="text-center space-y-3">
+          {/* Animated envelope icon */}
+          <div className="relative inline-flex">
+            <div className="bg-amber-500/15 text-amber-400 p-5 rounded-2xl ring-4 ring-amber-500/10 animate-pulse-glow">
               <Mail className="h-10 w-10" />
             </div>
-            {/* Floating check badge */}
-            <div className="absolute -bottom-1 -right-1 bg-emerald-500 rounded-full p-1 ring-2 ring-slate-900">
+            <div className="absolute -bottom-1 -right-1 bg-emerald-500 rounded-full p-1.5 ring-2 ring-[#0F172A] shadow-lg">
               <CheckCircle2 className="h-3.5 w-3.5 text-white" />
             </div>
           </div>
 
-          <div className="text-center space-y-1">
-            <h2 className="text-2xl font-bold text-white tracking-tight">Check Your Email</h2>
+          <div className="space-y-1">
+            <h2 className="text-3xl font-extrabold text-white tracking-tight">Check Your Email</h2>
             <p className="text-sm text-slate-400">We sent a verification link to</p>
-            <div className="inline-flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 mt-1">
-              <Mail className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-              <span className="text-amber-400 font-semibold text-sm">{email}</span>
-            </div>
           </div>
         </div>
 
-        {/* Steps */}
-        <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4 space-y-3">
-          <p className="text-[11px] font-bold text-slate-300 uppercase tracking-widest">What to do next</p>
-          {[
-            { step: '1', text: 'Open your email inbox' },
-            { step: '2', text: 'Find the email from AceScholar' },
-            { step: '3', text: 'Click the "Confirm your email" link' },
-            { step: '4', text: 'Return here and sign in to your account' },
-          ].map(({ step, text }) => (
-            <div key={step} className="flex items-center gap-3">
-              <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 text-[10px] font-bold flex items-center justify-center shrink-0">
-                {step}
-              </span>
-              <span className="text-xs text-slate-300">{text}</span>
+        <div className="bg-slate-900/60 border border-slate-800/80 p-7 sm:p-8 rounded-2xl shadow-2xl space-y-6 relative overflow-hidden backdrop-blur-sm">
+          
+          {/* Glow accent */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-48 bg-amber-500/5 rounded-full filter blur-2xl pointer-events-none" />
+
+          {/* Email badge */}
+          <div className="flex justify-center">
+            <div className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700/60 rounded-xl px-4 py-2">
+              <Mail className="h-4 w-4 text-amber-400 shrink-0" />
+              <span className="text-amber-400 font-semibold text-sm">{email}</span>
             </div>
-          ))}
+          </div>
+
+          {/* Steps */}
+          <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl p-5 space-y-3.5">
+            <p className="text-xs font-bold text-slate-300 uppercase tracking-widest">What to do next</p>
+            {[
+              { step: '1', text: 'Open your email inbox' },
+              { step: '2', text: 'Find the email from AceScholar' },
+              { step: '3', text: 'Click the "Confirm your email" link' },
+              { step: '4', text: 'Return here and sign in to your account' },
+            ].map(({ step, text }) => (
+              <div key={step} className="flex items-center gap-3">
+                <span className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-400 text-xs font-bold flex items-center justify-center shrink-0">
+                  {step}
+                </span>
+                <span className="text-sm text-slate-300">{text}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Spam note */}
+          <p className="text-center text-xs text-slate-500">
+            Can't find it? Check your <span className="text-slate-400 font-medium">spam or junk</span> folder.
+          </p>
+
+          {/* Resend button */}
+          <button
+            onClick={handleResend}
+            disabled={resendLoading || resendCooldown > 0}
+            className="w-full bg-transparent border border-slate-700/50 text-slate-400 hover:bg-slate-800/50 hover:text-white font-semibold py-3 px-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 text-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            id="resend-verification-btn"
+          >
+            <Mail className="h-4 w-4" />
+            {resendLoading
+              ? 'Sending...'
+              : resendCooldown > 0
+              ? `Resend in ${resendCooldown}s`
+              : 'Resend Verification Email'}
+          </button>
+
+          {/* Sign in CTA */}
+          <button
+            onClick={() => {
+              setCurrentPage('login');
+            }}
+            className="w-full bg-amber-500 hover:bg-amber-400 text-[#0F172A] font-bold py-3.5 px-4 rounded-xl shadow-lg hover:shadow-amber-500/20 transition-all duration-300 text-sm cursor-pointer flex items-center justify-center space-x-2 active:scale-[0.98]"
+            id="go-to-signin-btn"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Go to Sign In</span>
+          </button>
+
         </div>
-
-        {/* Spam note */}
-        <p className="text-center text-[11px] text-slate-500">
-          Can't find it? Check your <span className="text-slate-400 font-medium">spam or junk</span> folder.
-        </p>
-
-        {/* Resend button */}
-        <button
-          onClick={handleResend}
-          disabled={resendLoading || resendCooldown > 0}
-          className="w-full bg-transparent border border-slate-700/50 text-slate-400 hover:bg-slate-800/50 font-semibold py-2.5 px-4 rounded-lg transition-all flex items-center justify-center gap-2 text-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          id="resend-verification-btn"
-        >
-          <Mail className="h-4 w-4" />
-          {resendLoading
-            ? 'Sending...'
-            : resendCooldown > 0
-            ? `Resend in ${resendCooldown}s`
-            : 'Resend Verification Email'}
-        </button>
-
-        {/* Sign in CTA */}
-        <button
-          onClick={() => {
-            setCurrentPage('login');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-          className="w-full bg-amber-500 hover:bg-amber-400 text-[#0F172A] font-bold py-3 px-4 rounded-xl shadow-lg transition-all text-sm cursor-pointer"
-          id="go-to-signin-btn"
-        >
-          Go to Sign In
-        </button>
-
       </div>
     </div>
   );

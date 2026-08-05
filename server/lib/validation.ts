@@ -1,6 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // INPUT VALIDATION & SANITIZATION LAYER
 // ─────────────────────────────────────────────────────────────────────────────
+import sanitizeHtml from 'sanitize-html';
 
 /** Structured 400-level error thrown by validators and caught per-route. */
 export class InputError extends Error {
@@ -37,20 +38,25 @@ export const MAX_LENGTHS = {
 
 export const ALLOWED_ORDER_STATUSES   = ['pending','in_progress','under_review','delivered','revision_requested'] as const;
 export const ALLOWED_PAYMENT_STATUSES = ['pending','approved','rejected'] as const;
-export const ALLOWED_ROLES            = ['admin','client','expert'] as const;
-export const ALLOWED_ACADEMIC_LEVELS  = ['High School','Undergraduate','Postgraduate','Masters','PhD','Other'] as const;
 export const ALLOWED_PAYMENT_METHODS  = ['bank_transfer','crypto'] as const;
 
 /**
- * Strip HTML tags, null bytes, and non-printable control characters (keeping \t \n \r),
+ * Strip all HTML tags, null bytes, and non-printable control characters (keeping \t \n \r),
  * then trim and truncate to maxLen. Never throws; returns '' for null/undefined.
+ *
+ * Uses sanitize-html for robust HTML stripping that handles nested/malformed tags,
+ * event handlers, javascript: URIs, and other XSS vectors.
  */
 export function sanitizeText(val: any, maxLen: number): string {
   if (val === null || val === undefined) return '';
-  return String(val)
+  const cleaned = sanitizeHtml(String(val), {
+    allowedTags: [],
+    allowedAttributes: {},
+    disallowedTagsMode: 'discard',
+  });
+  return cleaned
     .replace(/\x00/g, '')                               // null bytes
     .replace(/[\x01-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // non-printable control chars
-    .replace(/<[^>]*>/g, '')                            // HTML / script tags
     .trim()
     .slice(0, maxLen);
 }
@@ -80,59 +86,6 @@ export function requireEmail(val: any): string {
   if (raw.length > MAX_LENGTHS.email) throw new InputError(`Email must not exceed ${MAX_LENGTHS.email} characters`);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) throw new InputError('A valid email address is required');
   return raw.toLowerCase();
-}
-
-/** Validate that a value is one of the allowed enum members. Throws InputError if not. */
-export function requireEnum<T extends string>(val: any, allowed: readonly T[], fieldName: string): T {
-  const s = String(val ?? '').trim();
-  if (!(allowed as readonly string[]).includes(s)) {
-    throw new InputError(`${fieldName} must be one of: ${allowed.join(', ')}`);
-  }
-  return s as T;
-}
-
-/** Coerce and range-check a numeric field. Throws InputError on failure. */
-export function requireNumber(val: any, min: number, max: number, fieldName: string): number {
-  const n = Number(val);
-  if (val === null || val === undefined || val === '' || isNaN(n)) {
-    throw new InputError(`${fieldName} must be a number`);
-  }
-  if (n < min || n > max) {
-    throw new InputError(`${fieldName} must be between ${min} and ${max}`);
-  }
-  return n;
-}
-
-/**
- * Validate and sanitize an optional URL field. Returns '' for missing/empty values.
- * Throws InputError if oversized or not an http(s) URL.
- */
-export function optionalUrl(val: any): string {
-  if (val === null || val === undefined || String(val).trim() === '') return '';
-  const raw = String(val).trim();
-  if (raw.length > MAX_LENGTHS.url) {
-    throw new InputError(`URL must not exceed ${MAX_LENGTHS.url} characters`);
-  }
-  if (!/^https?:\/\/.+/i.test(raw)) {
-    throw new InputError('URL must begin with http:// or https://');
-  }
-  return raw;
-}
-
-/** Validate that a string is a valid RFC 4122 UUID. Throws InputError if not. */
-export function requireUUID(val: any, fieldName: string): string {
-  const s = sanitizeText(val, 36);
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)) {
-    throw new InputError(`${fieldName} must be a valid UUID`);
-  }
-  return s.toLowerCase();
-}
-
-/** Validate that a value is an array within the allowed item count. Throws InputError if not. */
-export function requireArray(val: any, maxItems: number, fieldName: string): any[] {
-  if (!Array.isArray(val)) throw new InputError(`${fieldName} must be an array`);
-  if (val.length > maxItems) throw new InputError(`${fieldName} must contain at most ${maxItems} items`);
-  return val;
 }
 
 /** Validate a route parameter that should be a short alphanumeric/dash ID. */

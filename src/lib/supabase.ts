@@ -1,4 +1,4 @@
-import { Profile, Order, Message, ContactMessage, Payment } from '../types';
+import { Profile, Order, Message, ContactMessage, Payment, Withdrawal, Rating, Notification } from '../types';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -13,25 +13,16 @@ export const supabase = supabaseUrl && supabaseAnonKey
 /**
  * Returns auth headers for backend API requests.
  * Uses the Supabase client's getSession() to get a fresh (auto-refreshed) JWT.
- * Falls back to reading from localStorage if Supabase client is unavailable.
+ * Tokens are NEVER stored in localStorage — they are managed by Supabase's
+ * internal session storage (which uses httpOnly cookies when configured).
  */
 export const getAuthHeaders = async (): Promise<Record<string, string>> => {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   try {
-    // Prefer Supabase client session (auto-refreshes expired tokens)
     if (supabase) {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.access_token) {
         headers['Authorization'] = `Bearer ${session.access_token}`;
-        return headers;
-      }
-    }
-    // Fallback: read raw token from localStorage
-    const stored = localStorage.getItem('ace_scholar_current_user');
-    if (stored) {
-      const user = JSON.parse(stored);
-      if (user?.access_token) {
-        headers['Authorization'] = `Bearer ${user.access_token}`;
       }
     }
   } catch (e) {
@@ -355,6 +346,173 @@ export const fallbackDb = {
     } catch (e) {
       console.error('getPayments failed:', e);
       return [];
+    }
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // WITHDRAWALS
+  // ─────────────────────────────────────────────────────────────────────────
+
+  requestWithdrawal: async (data: { amount: number; method: string; account_details: string; currency?: string }): Promise<Withdrawal | null> => {
+    try {
+      const res = await fetch('/api/withdrawals', {
+        method: 'POST',
+        headers: await getAuthHeaders(),
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      return await res.json();
+    } catch (e) {
+      console.error('requestWithdrawal failed:', e);
+      return null;
+    }
+  },
+
+  getWithdrawals: async (): Promise<Withdrawal[]> => {
+    try {
+      const res = await fetch('/api/withdrawals', { headers: await getAuthHeaders() });
+      if (!res.ok) return [];
+      return await res.json();
+    } catch (e) {
+      console.error('getWithdrawals failed:', e);
+      return [];
+    }
+  },
+
+  getBalance: async (): Promise<{ total_earnings: number; total_withdrawn: number; available_balance: number }> => {
+    try {
+      const res = await fetch('/api/withdrawals/balance', { headers: await getAuthHeaders() });
+      if (!res.ok) return { total_earnings: 0, total_withdrawn: 0, available_balance: 0 };
+      return await res.json();
+    } catch (e) {
+      console.error('getBalance failed:', e);
+      return { total_earnings: 0, total_withdrawn: 0, available_balance: 0 };
+    }
+  },
+
+  updateWithdrawal: async (id: string, status: 'approved' | 'rejected', admin_note?: string, admin_screenshot?: string): Promise<Withdrawal | null> => {
+    try {
+      const res = await fetch(`/api/withdrawals/${id}`, {
+        method: 'PUT',
+        headers: await getAuthHeaders(),
+        body: JSON.stringify({ status, admin_note, admin_screenshot }),
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (e) {
+      console.error('updateWithdrawal failed:', e);
+      return null;
+    }
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // RATINGS
+  // ─────────────────────────────────────────────────────────────────────────
+
+  submitRating: async (data: { order_id: string; score: number; comment?: string }): Promise<Rating | null> => {
+    try {
+      const res = await fetch('/api/ratings', {
+        method: 'POST',
+        headers: await getAuthHeaders(),
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      return await res.json();
+    } catch (e) {
+      console.error('submitRating failed:', e);
+      return null;
+    }
+  },
+
+  getExpertRatings: async (email: string): Promise<Rating[]> => {
+    try {
+      const res = await fetch(`/api/ratings/expert/${encodeURIComponent(email)}`, { headers: await getAuthHeaders() });
+      if (!res.ok) return [];
+      return await res.json();
+    } catch (e) {
+      console.error('getExpertRatings failed:', e);
+      return [];
+    }
+  },
+
+  getRatings: async (): Promise<Rating[]> => {
+    try {
+      const res = await fetch('/api/ratings', { headers: await getAuthHeaders() });
+      if (!res.ok) return [];
+      return await res.json();
+    } catch (e) {
+      console.error('getRatings failed:', e);
+      return [];
+    }
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // NOTIFICATIONS
+  // ─────────────────────────────────────────────────────────────────────────
+
+  getNotifications: async (): Promise<Notification[]> => {
+    try {
+      const res = await fetch('/api/notifications', { headers: await getAuthHeaders() });
+      if (!res.ok) return [];
+      return await res.json();
+    } catch (e) {
+      console.error('getNotifications failed:', e);
+      return [];
+    }
+  },
+
+  getUnreadCount: async (): Promise<number> => {
+    try {
+      const res = await fetch('/api/notifications/unread-count', { headers: await getAuthHeaders() });
+      if (!res.ok) return 0;
+      const data = await res.json();
+      return data.count || 0;
+    } catch (e) {
+      console.error('getUnreadCount failed:', e);
+      return 0;
+    }
+  },
+
+  markNotificationRead: async (id: string): Promise<void> => {
+    try {
+      await fetch(`/api/notifications/${id}/read`, {
+        method: 'PUT',
+        headers: await getAuthHeaders(),
+      });
+    } catch (e) {
+      console.error('markNotificationRead failed:', e);
+    }
+  },
+
+  markAllNotificationsRead: async (): Promise<void> => {
+    try {
+      await fetch('/api/notifications/read-all', {
+        method: 'PUT',
+        headers: await getAuthHeaders(),
+      });
+    } catch (e) {
+      console.error('markAllNotificationsRead failed:', e);
+    }
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // ANALYTICS
+  // ─────────────────────────────────────────────────────────────────────────
+
+  getAnalytics: async (): Promise<any> => {
+    try {
+      const res = await fetch('/api/analytics', { headers: await getAuthHeaders() });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (e) {
+      console.error('getAnalytics failed:', e);
+      return null;
     }
   },
 };

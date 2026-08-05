@@ -94,7 +94,7 @@ router.post('/login', enforceBodyLimit(10 * 1024), async (req: Request, res: Res
       .eq('id', user.id)
       .maybeSingle();
 
-    const userProfile = {
+    const userProfile: Record<string, any> = {
       id: user.id,
       full_name: profileRow?.full_name || fullName,
       email: emailLower,
@@ -105,12 +105,24 @@ router.post('/login', enforceBodyLimit(10 * 1024), async (req: Request, res: Res
       gpa: profileRow?.gpa || user.user_metadata?.gpa || null,
       qualification: profileRow?.qualification || user.user_metadata?.qualification || null,
       subjects: profileRow?.subjects || user.user_metadata?.subjects || null,
-      expert_proposal: profileRow?.expert_proposal || user.user_metadata?.expert_proposal || null,
       expert_status: profileRow?.expert_status || user.user_metadata?.expert_status || null,
       expert_signup_at: profileRow?.expert_signup_at || user.user_metadata?.expert_signup_at || null,
+      institution: profileRow?.institution || user.user_metadata?.institution || null,
+      graduation_year: profileRow?.graduation_year || user.user_metadata?.graduation_year || null,
+      field_of_study: profileRow?.field_of_study || user.user_metadata?.field_of_study || null,
+      software: profileRow?.software || user.user_metadata?.software || null,
+      experience: profileRow?.experience || user.user_metadata?.experience || null,
+      languages: profileRow?.languages || user.user_metadata?.languages || null,
+      portfolio_url: profileRow?.portfolio_url || user.user_metadata?.portfolio_url || null,
+      availability: profileRow?.availability || user.user_metadata?.availability || null,
+      referral: profileRow?.referral || user.user_metadata?.referral || null,
       access_token: data.session?.access_token || null,
       refresh_token: data.session?.refresh_token || null,
     };
+
+    // Include expert fields for the logged-in user's own profile
+    userProfile.expert_proposal = profileRow?.expert_proposal || user.user_metadata?.expert_proposal || null;
+    userProfile.expert_documents = profileRow?.expert_documents || user.user_metadata?.expert_documents || null;
 
     return res.json(userProfile);
   } catch (err) {
@@ -159,7 +171,7 @@ router.post('/forgot-password', enforceBodyLimit(10 * 1024), async (req: Request
     }
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${process.env.ALLOWED_ORIGIN || 'http://localhost:5173'}/reset-password`,
+      redirectTo: `${process.env.ALLOWED_ORIGIN || ''}/reset-password`,
     });
 
     if (error) {

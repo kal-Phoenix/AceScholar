@@ -15,8 +15,17 @@ export interface Profile {
   expert_signup_at?: string;
   expert_documents?: Array<{ name: string; size?: number; type?: string; content?: string }>;
   expert_status?: 'pending' | 'approved' | 'rejected';
-  access_token?: string | null;
-  refresh_token?: string | null;
+  is_available?: boolean;
+  last_active_at?: string;
+  institution?: string;
+  graduation_year?: string;
+  field_of_study?: string;
+  software?: string;
+  experience?: string;
+  languages?: string;
+  portfolio_url?: string;
+  availability?: string;
+  referral?: string;
 }
 
 export interface OrderApplicant {
@@ -24,6 +33,7 @@ export interface OrderApplicant {
   expert_name: string;
   proposal?: string;
   applied_at: string;
+  documents?: { name: string; url?: string; data?: string }[];
 }
 
 export interface Order {
@@ -68,6 +78,16 @@ export interface Order {
   expert_submission_name?: string;
   // Admin review screenshots shared with student
   admin_screenshots?: string[];
+  // Revision window
+  revision_deadline?: string;
+  revision_count?: number;
+  max_revisions?: number;
+  // Dispute resolution
+  dispute_status?: 'open' | 'under_review' | 'resolved' | null;
+  dispute_reason?: string;
+  dispute_created_at?: string;
+  dispute_resolved_at?: string;
+  dispute_resolution?: string;
 }
 
 export interface Message {
@@ -77,6 +97,7 @@ export interface Message {
   sender_name: string;
   content: string;
   is_admin: boolean;
+  recipient?: 'student' | 'expert' | null;
   created_at: string;
 }
 
@@ -88,15 +109,6 @@ export interface ContactMessage {
   message: string;
   is_read: boolean;
   created_at: string;
-}
-
-export interface PaymentProvider {
-  id: string;
-  name: string;
-  logo: string;
-  type: 'card' | 'mobile_money';
-  description: string;
-  fee_percentage: number;
 }
 
 export interface Payment {
@@ -112,5 +124,42 @@ export interface Payment {
   phone_number?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface Withdrawal {
+  id: string;
+  expert_email: string;
+  expert_name: string;
+  amount: number;
+  currency: string;
+  method: string;
+  account_details: string;
+  status: 'pending' | 'approved' | 'rejected';
+  admin_note?: string;
+  admin_screenshot?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Rating {
+  id: string;
+  order_id: string;
+  expert_email: string;
+  client_email: string;
+  client_name: string;
+  score: number;
+  comment?: string;
+  created_at: string;
+}
+
+export interface Notification {
+  id: string;
+  user_email: string;
+  type: string;
+  title: string;
+  message: string;
+  read: boolean;
+  link?: string;
+  created_at: string;
 }
 

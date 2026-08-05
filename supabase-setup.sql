@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     email TEXT NOT NULL UNIQUE,
     whatsapp TEXT,
     country TEXT,
-    role TEXT DEFAULT 'client' NOT NULL,
+    role TEXT DEFAULT 'client' NOT NULL CHECK (role IN ('client', 'expert', 'admin')),
     expert_status TEXT,
     gpa TEXT,
     qualification TEXT,
@@ -35,24 +35,29 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
 -- Policies (drop-and-recreate for idempotency)
+-- Users can only view their own profile (no public SELECT)
 DROP POLICY IF EXISTS "Public profiles are viewable by anyone." ON public.profiles;
-CREATE POLICY "Public profiles are viewable by anyone."
-    ON public.profiles FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Users can view their own profile." ON public.profiles;
+CREATE POLICY "Users can view their own profile."
+    ON public.profiles FOR SELECT USING (auth.uid() = id);
 
 DROP POLICY IF EXISTS "Users can insert their own profile." ON public.profiles;
 CREATE POLICY "Users can insert their own profile."
     ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
 
+-- Prevent role escalation: users cannot set role to 'admin' via UPDATE
 DROP POLICY IF EXISTS "Users can update their own profile." ON public.profiles;
 CREATE POLICY "Users can update their own profile."
-    ON public.profiles FOR UPDATE USING (auth.uid() = id);
+    ON public.profiles FOR UPDATE USING (auth.uid() = id)
+    WITH CHECK (
+        auth.uid() = id
+        AND (role IS NULL OR role = 'client' OR role = 'expert')
+    );
 
--- Service-role upsert policy (for server-side writes bypassing RLS)
-DROP POLICY IF EXISTS "Service role can upsert any profile." ON public.profiles;
-CREATE POLICY "Service role can upsert any profile."
-    ON public.profiles FOR ALL
-    USING (true)
-    WITH CHECK (true);
+-- NOTE: The service-role client bypasses RLS entirely.
+-- No permissive ALL policy is needed — the previous "Service role can upsert"
+-- policy was applying to ALL authenticated users via the anon key, which was
+-- a privilege-escalation bug. Removed intentionally.
 
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -185,7 +190,7 @@ CREATE POLICY "Admins have full read access to all orders"
         EXISTS (
             SELECT 1 FROM public.profiles
             WHERE profiles.id = auth.uid()
-            AND (profiles.role = 'admin' OR profiles.email ILIKE 'admin@%')
+            AND profiles.role = 'admin'
         )
     );
 
@@ -196,16 +201,11 @@ CREATE POLICY "Admins have full update access to all orders"
         EXISTS (
             SELECT 1 FROM public.profiles
             WHERE profiles.id = auth.uid()
-            AND (profiles.role = 'admin' OR profiles.email ILIKE 'admin@%')
+            AND profiles.role = 'admin'
         )
     );
 
--- Service role full access (server-side bypasses RLS)
-DROP POLICY IF EXISTS "Service role full access to orders" ON public.orders;
-CREATE POLICY "Service role full access to orders"
-    ON public.orders FOR ALL
-    USING (true)
-    WITH CHECK (true);
+-- NOTE: service-role key bypasses RLS. No permissive ALL policy needed.
 
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -219,6 +219,7 @@ CREATE TABLE IF NOT EXISTS public.messages (
     sender_name TEXT NOT NULL,
     content TEXT NOT NULL,
     is_admin BOOLEAN DEFAULT false NOT NULL,
+    recipient TEXT DEFAULT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
@@ -238,7 +239,7 @@ CREATE POLICY "Users can read thread messages for their own orders"
                 OR EXISTS (
                     SELECT 1 FROM public.profiles
                     WHERE profiles.id = auth.uid()
-                    AND (profiles.role = 'admin' OR profiles.email ILIKE 'admin@%')
+                    AND profiles.role = 'admin'
                 )
             )
         )
@@ -256,18 +257,13 @@ CREATE POLICY "Users can post messages in order thread"
                 OR EXISTS (
                     SELECT 1 FROM public.profiles
                     WHERE profiles.id = auth.uid()
-                    AND (profiles.role = 'admin' OR profiles.email ILIKE 'admin@%')
+                    AND profiles.role = 'admin'
                 )
             )
         )
     );
 
--- Service role full access
-DROP POLICY IF EXISTS "Service role full access to messages" ON public.messages;
-CREATE POLICY "Service role full access to messages"
-    ON public.messages FOR ALL
-    USING (true)
-    WITH CHECK (true);
+-- NOTE: service-role key bypasses RLS. No permissive ALL policy needed.
 
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -300,16 +296,11 @@ CREATE POLICY "Only admins can view contact requests"
         EXISTS (
             SELECT 1 FROM public.profiles
             WHERE profiles.id = auth.uid()
-            AND (profiles.role = 'admin' OR profiles.email ILIKE 'admin@%')
+            AND profiles.role = 'admin'
         )
     );
 
--- Service role full access
-DROP POLICY IF EXISTS "Service role full access to contacts" ON public.contact_messages;
-CREATE POLICY "Service role full access to contacts"
-    ON public.contact_messages FOR ALL
-    USING (true)
-    WITH CHECK (true);
+-- NOTE: service-role key bypasses RLS. No permissive ALL policy needed.
 
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -317,14 +308,18 @@ CREATE POLICY "Service role full access to contacts"
 --    Private bucket for order attachments and delivery files.
 -- ─────────────────────────────────────────────────────────────────────────────
 INSERT INTO storage.buckets (id, name, public)
-VALUES ('order-files', 'order-files', true)
-ON CONFLICT (id) DO UPDATE SET public = true;
+VALUES ('order-files', 'order-files', false)
+ON CONFLICT (id) DO UPDATE SET public = false;
 
--- Storage policies
+-- Storage policies — private bucket, only authenticated users can read their own files
 DROP POLICY IF EXISTS "Public read access to order-files" ON storage.objects;
-CREATE POLICY "Public read access to order-files"
+DROP POLICY IF EXISTS "Authenticated users can read order-files" ON storage.objects;
+CREATE POLICY "Authenticated users can read order-files"
     ON storage.objects FOR SELECT
-    USING (bucket_id = 'order-files');
+    USING (
+        bucket_id = 'order-files'
+        AND auth.role() = 'authenticated'
+    );
 
 DROP POLICY IF EXISTS "Authenticated users can upload to order-files" ON storage.objects;
 CREATE POLICY "Authenticated users can upload to order-files"
@@ -334,11 +329,7 @@ CREATE POLICY "Authenticated users can upload to order-files"
         AND auth.role() = 'authenticated'
     );
 
-DROP POLICY IF EXISTS "Service role full access to order-files storage" ON storage.objects;
-CREATE POLICY "Service role full access to order-files storage"
-    ON storage.objects FOR ALL
-    USING (bucket_id = 'order-files')
-    WITH CHECK (bucket_id = 'order-files');
+-- NOTE: service-role key bypasses RLS. No permissive ALL policy needed.
 
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -381,17 +372,26 @@ CREATE POLICY "Admins can view all payments"
         EXISTS (
             SELECT 1 FROM public.profiles
             WHERE profiles.id = auth.uid()
-            AND (profiles.role = 'admin' OR profiles.email ILIKE 'admin@%')
+            AND profiles.role = 'admin'
         )
     );
 
-DROP POLICY IF EXISTS "Service role full access to payments" ON public.payments;
-CREATE POLICY "Service role full access to payments"
-    ON public.payments FOR ALL
-    USING (true)
-    WITH CHECK (true);
+-- NOTE: service-role key bypasses RLS. No permissive ALL policy needed.
 
 
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 6b. PERFORMANCE INDEXES
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE INDEX IF NOT EXISTS idx_orders_client_email ON public.orders (client_email);
+CREATE INDEX IF NOT EXISTS idx_orders_assigned_to ON public.orders (assigned_to);
+CREATE INDEX IF NOT EXISTS idx_messages_order_created ON public.messages (order_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_email ON public.notifications (user_email);
+CREATE INDEX IF NOT EXISTS idx_ratings_expert_email ON public.ratings (expert_email);
+CREATE INDEX IF NOT EXISTS idx_withdrawals_expert_email ON public.withdrawals (expert_email);
+CREATE INDEX IF NOT EXISTS idx_profiles_role ON public.profiles (role);
+CREATE INDEX IF NOT EXISTS idx_payments_reference_id ON public.payments (reference_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ratings_order_client ON public.ratings (order_id, client_email);
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 7. VERIFICATION QUERIES
@@ -400,3 +400,141 @@ CREATE POLICY "Service role full access to payments"
 -- SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;
 -- SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'orders' ORDER BY ordinal_position;
 -- SELECT tgname FROM pg_trigger WHERE tgrelid = 'auth.users'::regclass;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 8. MIGRATION: Add recipient column to messages table
+--    Run this if the messages table already exists without the recipient column.
+-- ─────────────────────────────────────────────────────────────────────────────
+DO $$ BEGIN
+    ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS recipient TEXT DEFAULT NULL;
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 9. WITHDRAWALS TABLE
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.withdrawals (
+    id TEXT PRIMARY KEY,
+    expert_email TEXT NOT NULL,
+    expert_name TEXT NOT NULL,
+    amount NUMERIC NOT NULL,
+    currency TEXT DEFAULT 'USD' NOT NULL,
+    method TEXT NOT NULL,
+    account_details TEXT NOT NULL,
+    status TEXT DEFAULT 'pending' NOT NULL,
+    admin_note TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+);
+
+ALTER TABLE public.withdrawals ENABLE ROW LEVEL SECURITY;
+
+-- Withdrawals: experts see their own, admins see all
+DROP POLICY IF EXISTS "Experts can view their own withdrawals" ON public.withdrawals;
+CREATE POLICY "Experts can view their own withdrawals"
+    ON public.withdrawals FOR SELECT
+    USING (
+        expert_email = (
+            SELECT email FROM public.profiles WHERE id = auth.uid()
+        )
+    );
+
+DROP POLICY IF EXISTS "Experts can insert their own withdrawals" ON public.withdrawals;
+CREATE POLICY "Experts can insert their own withdrawals"
+    ON public.withdrawals FOR INSERT
+    WITH CHECK (
+        expert_email = (
+            SELECT email FROM public.profiles WHERE id = auth.uid()
+        )
+    );
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 10. RATINGS TABLE
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.ratings (
+    id TEXT PRIMARY KEY,
+    order_id TEXT REFERENCES public.orders(id) ON DELETE CASCADE NOT NULL,
+    expert_email TEXT NOT NULL,
+    client_email TEXT NOT NULL,
+    client_name TEXT NOT NULL,
+    score INTEGER NOT NULL CHECK (score >= 1 AND score <= 5),
+    comment TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+);
+
+ALTER TABLE public.ratings ENABLE ROW LEVEL SECURITY;
+
+-- Ratings: clients see their own, anyone can read ratings for display
+DROP POLICY IF EXISTS "Clients can view their own ratings" ON public.ratings;
+CREATE POLICY "Clients can view their own ratings"
+    ON public.ratings FOR SELECT
+    USING (true);
+
+DROP POLICY IF EXISTS "Clients can insert ratings" ON public.ratings;
+CREATE POLICY "Clients can insert ratings"
+    ON public.ratings FOR INSERT
+    WITH CHECK (
+        client_email = (
+            SELECT email FROM public.profiles WHERE id = auth.uid()
+        )
+    );
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 11. NOTIFICATIONS TABLE
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.notifications (
+    id TEXT PRIMARY KEY,
+    user_email TEXT NOT NULL,
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    read BOOLEAN DEFAULT false NOT NULL,
+    link TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+);
+
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+
+-- Notifications: users see their own by email
+DROP POLICY IF EXISTS "Users can view their own notifications" ON public.notifications;
+CREATE POLICY "Users can view their own notifications"
+    ON public.notifications FOR SELECT
+    USING (
+        user_email = (
+            SELECT email FROM public.profiles WHERE id = auth.uid()
+        )
+    );
+
+DROP POLICY IF EXISTS "Users can update their own notifications" ON public.notifications;
+CREATE POLICY "Users can update their own notifications"
+    ON public.notifications FOR UPDATE
+    USING (
+        user_email = (
+            SELECT email FROM public.profiles WHERE id = auth.uid()
+        )
+    );
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 12. MIGRATION: Add new feature columns
+--     Run this block to add availability, revision, dispute, and portfolio fields.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- Expert availability
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_available BOOLEAN DEFAULT true;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP WITH TIME ZONE;
+
+-- Revision window
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS revision_deadline TIMESTAMP WITH TIME ZONE;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS revision_count INTEGER DEFAULT 0;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS max_revisions INTEGER DEFAULT 2;
+
+-- Dispute resolution
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS dispute_status TEXT DEFAULT NULL;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS dispute_reason TEXT DEFAULT NULL;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS dispute_created_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS dispute_resolved_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS dispute_resolution TEXT DEFAULT NULL;

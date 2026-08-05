@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../lib/supabase.js';
-import { requireEmail, requireText, MAX_LENGTHS, InputError } from '../lib/validation.js';
+import { requireEmail, requireText, requireIdParam, MAX_LENGTHS, InputError } from '../lib/validation.js';
 import { getRequesterProfile } from '../lib/utils.js';
 
 const router = Router();
@@ -72,8 +72,9 @@ router.patch('/:messageId', async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Unauthorized. Admin credentials required.' });
     }
 
-    const messageId = req.params.messageId;
-    if (!messageId) return res.status(400).json({ error: 'Message ID is required' });
+    let messageId: string;
+    try { messageId = requireIdParam(req.params.messageId, 'Message ID'); }
+    catch (e: any) { if (e instanceof InputError) return res.status(400).json({ error: e.message }); throw e; }
 
     const { is_read } = req.body;
     if (typeof is_read !== 'boolean') {
@@ -99,8 +100,9 @@ router.delete('/:messageId', async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Unauthorized. Admin credentials required.' });
     }
 
-    const messageId = req.params.messageId;
-    if (!messageId) return res.status(400).json({ error: 'Message ID is required' });
+    let messageId: string;
+    try { messageId = requireIdParam(req.params.messageId, 'Message ID'); }
+    catch (e: any) { if (e instanceof InputError) return res.status(400).json({ error: e.message }); throw e; }
 
     const { error } = await db.from('contact_messages').delete().eq('id', messageId);
     if (error) return res.status(500).json({ error: 'Failed to delete contact message' });

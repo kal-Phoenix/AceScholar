@@ -21,32 +21,31 @@ export default function Pricing({ setCurrentPage, setSelectedServiceType, showTo
   const [activeCategory, setActiveCategory] = useState<'writing' | 'coding' | 'engineering' | 'data' | 'stem_presentation'>('writing');
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
 
-  // Helper to dynamically convert price ranges based on detected location
-  const formatPriceRange = (rangeStr: string) => {
-    if (!detectedLocation) return rangeStr;
+  // Helper to dynamically format price ranges based on detected location
+  const formatPriceRange = (tier: { range: string; etbRange?: string }) => {
+    const isEthiopia = detectedLocation?.currency === 'ETB' || detectedLocation?.country === 'Ethiopia';
+    if (isEthiopia && tier.etbRange) {
+      return tier.etbRange;
+    }
+    if (!detectedLocation || detectedLocation.currency === 'USD' || !detectedLocation.exchangeRate) {
+      return tier.range;
+    }
     
-    const numbers = rangeStr.match(/\d+/g);
-    if (!numbers || numbers.length === 0) return rangeStr;
+    const numbers = tier.range.match(/\d+/g);
+    if (!numbers || numbers.length === 0) return tier.range;
 
     const symbol = detectedLocation.symbol;
     const rate = detectedLocation.exchangeRate;
 
-    const converted = numbers.map(num => {
-      const val = Number(num) * rate;
-      if (detectedLocation.currency === 'ETB') {
-        return Math.round(val / 10) * 10;
-      }
-      return Math.round(val);
-    });
-
-    const hasPlus = rangeStr.includes('+');
+    const converted = numbers.map(num => Math.round(Number(num) * rate));
+    const hasPlus = tier.range.includes('+');
     if (converted.length === 1) {
       return `${symbol}${converted[0].toLocaleString()}${hasPlus ? '+' : ''}`;
     } else if (converted.length === 2) {
       return `${symbol}${converted[0].toLocaleString()} – ${symbol}${converted[1].toLocaleString()}${hasPlus ? '+' : ''}`;
     }
 
-    return rangeStr;
+    return tier.range;
   };
 
   // Quote form state
@@ -55,74 +54,76 @@ export default function Pricing({ setCurrentPage, setSelectedServiceType, showTo
   const [quoteDesc, setQuoteDesc] = useState('');
   const [quoteDeadline, setQuoteDeadline] = useState('');
 
+  const env = import.meta.env;
+
   const pricingCategories = {
     writing: {
       title: 'Academic Writing',
       serviceName: 'Academic Writing',
       tiers: [
-        { name: 'Basic', range: '$20–$40', desc: 'Up to 5 pages of written work', delivery: '48hr delivery', bullets: ['Custom research scope', 'APA/Harvard citations', 'Fully edited report', 'Turnitin pass report'] },
-        { name: 'Standard', range: '$40–$80', desc: '5–15 pages of deep analysis', delivery: '72hr delivery', bullets: ['Advanced research scope', 'Peer-reviewed sources', 'Comprehensive structuring', 'High-priority processing'] },
-        { name: 'Premium', range: '$80–$200+', desc: '15+ pages or full thesis', delivery: 'Custom timeline', bullets: ['PhD level specialists', 'Complete thesis drafts', 'Detailed raw datasets', 'Direct writer communication'] }
+        { name: 'Basic', range: env.VITE_PRICE_WRITING_BASIC || '$20–$40', etbRange: env.VITE_PRICE_ETB_WRITING_BASIC || '500–1,500 Br', desc: 'Up to 5 pages', delivery: '48hr delivery', bullets: ['Research and sourcing', 'APA/Harvard formatting', 'Fully edited draft', 'Turnitin-safe output'] },
+        { name: 'Standard', range: env.VITE_PRICE_WRITING_STANDARD || '$40–$80', etbRange: env.VITE_PRICE_ETB_WRITING_STANDARD || '1,500–3,000 Br', desc: '5–15 pages, deeper analysis', delivery: '72hr delivery', bullets: ['Peer-reviewed sources', 'Extended literature review', 'Proper structure and flow', 'Priority queue'] },
+        { name: 'Premium', range: env.VITE_PRICE_WRITING_PREMIUM || '$80–$200+', etbRange: env.VITE_PRICE_ETB_WRITING_PREMIUM || '3,000–8,000+ Br', desc: '15+ pages or full thesis', delivery: 'Custom timeline', bullets: ['PhD-level specialists', 'Full chapter or thesis drafts', 'Raw research datasets', 'Direct expert contact'] }
       ]
     },
     coding: {
       title: 'Coding Projects',
       serviceName: 'Coding Project',
       tiers: [
-        { name: 'Basic', range: '$20–$40', desc: 'Simple scripts and functions', delivery: '24hr delivery', bullets: ['Single script file', 'Code syntax review', 'Execution comments', '1-day turnaround'] },
-        { name: 'Standard', range: '$50–$100', desc: 'Full app with documentation', delivery: '48hr delivery', bullets: ['Multi-file projects', 'Detailed PDF install guide', 'Fully verified test cases', 'Clean architectural separation'] },
-        { name: 'Premium', range: '$100–$300+', desc: 'Complex systems & servers', delivery: 'Custom timeline', bullets: ['Full-stack implementations', 'Robust error logging', 'Database persistence included', 'Live Zoom code walkthrough'] }
+        { name: 'Basic', range: env.VITE_PRICE_CODING_BASIC || '$20–$40', etbRange: env.VITE_PRICE_ETB_CODING_BASIC || '500–1,500 Br', desc: 'Scripts and small functions', delivery: '24hr delivery', bullets: ['Single file delivery', 'Inline code comments', 'Tested and runnable', '1-day turnaround'] },
+        { name: 'Standard', range: env.VITE_PRICE_CODING_STANDARD || '$50–$100', etbRange: env.VITE_PRICE_ETB_CODING_STANDARD || '2,000–4,000 Br', desc: 'Full project with documentation', delivery: '48hr delivery', bullets: ['Multi-file structure', 'Setup and install guide', 'Test cases included', 'Clean folder architecture'] },
+        { name: 'Premium', range: env.VITE_PRICE_CODING_PREMIUM || '$100–$300+', etbRange: env.VITE_PRICE_ETB_CODING_PREMIUM || '4,000–12,000+ Br', desc: 'Complex systems and APIs', delivery: 'Custom timeline', bullets: ['Full-stack builds', 'Error handling and logging', 'Database layer included', 'Live walkthrough session'] }
       ]
     },
     engineering: {
       title: 'Engineering Drawings',
       serviceName: 'Engineering Drawing',
       tiers: [
-        { name: 'Basic', range: '$20–$40', desc: '1–2 standard CAD drafts', delivery: '48hr delivery', bullets: ['2D projection designs', 'PDF/DXF formats', 'Exact dimensions', 'Geometric tolerances'] },
-        { name: 'Standard', range: '$50–$100', desc: '3–5 drawings & assemblies', delivery: '72hr delivery', bullets: ['3D SolidWorks source files', 'Exploded views', 'Materials list (BOM)', 'Structural reports included'] },
-        { name: 'Premium', range: '$100–$250+', desc: 'Full custom engine/project set', delivery: 'Custom timeline', bullets: ['Complete structural assembly', 'FEA stress test simulation', 'Parametric sheet modeling', 'Academic design manual'] }
+        { name: 'Basic', range: env.VITE_PRICE_ENGINEERING_BASIC || '$20–$40', etbRange: env.VITE_PRICE_ETB_ENGINEERING_BASIC || '500–1,500 Br', desc: '1–2 standard CAD drafts', delivery: '48hr delivery', bullets: ['2D orthographic views', 'PDF and DXF formats', 'Correct dimensions', 'Standard tolerances'] },
+        { name: 'Standard', range: env.VITE_PRICE_ENGINEERING_STANDARD || '$50–$100', etbRange: env.VITE_PRICE_ETB_ENGINEERING_STANDARD || '2,000–4,000 Br', desc: '3–5 drawings and assemblies', delivery: '72hr delivery', bullets: ['3D SolidWorks files', 'Exploded assembly views', 'Bill of materials (BOM)', 'Structural notes'] },
+        { name: 'Premium', range: env.VITE_PRICE_ENGINEERING_PREMIUM || '$100–$250+', etbRange: env.VITE_PRICE_ETB_ENGINEERING_PREMIUM || '4,000–10,000+ Br', desc: 'Full project drawing set', delivery: 'Custom timeline', bullets: ['Complete assembly package', 'FEA simulation report', 'Parametric models', 'Design documentation'] }
       ]
     },
     data: {
       title: 'Data Analysis',
       serviceName: 'Data Analysis',
       tiers: [
-        { name: 'Basic', range: '$20–$35', desc: 'Simple charts & summaries', delivery: '24hr delivery', bullets: ['Basic cleaning & filter', 'Descriptive tables', 'PNG/SVG visuals', 'Simple interpretation guide'] },
-        { name: 'Standard', range: '$40–$80', desc: 'Full report & interpretation', delivery: '48hr delivery', bullets: ['SPSS / R / Python source', 'Hypothesis testing', 'Linear correlation testing', 'Detailed methodology block'] },
-        { name: 'Premium', range: '$80–$200+', desc: 'Advanced statistical metrics', delivery: 'Custom timeline', bullets: ['Predictive machine modeling', 'Interactive bento dashboard', 'Clean markdown report', 'Custom data generation steps'] }
+        { name: 'Basic', range: env.VITE_PRICE_DATA_BASIC || '$20–$35', etbRange: env.VITE_PRICE_ETB_DATA_BASIC || '500–1,200 Br', desc: 'Charts and summary stats', delivery: '24hr delivery', bullets: ['Data cleaning', 'Descriptive statistics', 'Chart exports (PNG/SVG)', 'Short interpretation'] },
+        { name: 'Standard', range: env.VITE_PRICE_DATA_STANDARD || '$40–$80', etbRange: env.VITE_PRICE_ETB_DATA_STANDARD || '1,500–3,000 Br', desc: 'Full report with methodology', delivery: '48hr delivery', bullets: ['SPSS / R / Python source', 'Hypothesis testing', 'Correlation analysis', 'Methods section write-up'] },
+        { name: 'Premium', range: env.VITE_PRICE_DATA_PREMIUM || '$80–$200+', etbRange: env.VITE_PRICE_ETB_DATA_PREMIUM || '3,000–8,000+ Br', desc: 'Advanced models and dashboards', delivery: 'Custom timeline', bullets: ['Predictive modeling', 'Interactive dashboards', 'Full written report', 'Custom dataset generation'] }
       ]
     },
     stem_presentation: {
       title: 'STEM & Presentations',
       serviceName: 'STEM',
       tiers: [
-        { name: 'Basic', range: '$15–$30', desc: 'Calculus, algebra or quick slides', delivery: '24hr delivery', bullets: ['Formula-by-formula derivation', 'PDF scan of handwritten proofs', '10 PowerPoint slides', 'Basic outline formatting'] },
-        { name: 'Standard', range: '$30–$60', desc: 'Physics / biochem solver or full deck', delivery: '48hr delivery', bullets: ['Simulation code files included', 'Step-by-step rigorous text', '20 highly designed slides', 'Custom charts and vector icons'] },
-        { name: 'Premium', range: '$60–$120+', desc: 'PhD proofs or investor decks', delivery: 'Custom timeline', bullets: ['Advanced research standards', 'Interactive canvas plots', 'Investor pitch-level layout', 'Speaker notes script included'] }
+        { name: 'Basic', range: env.VITE_PRICE_STEM_BASIC || '$15–$30', etbRange: env.VITE_PRICE_ETB_STEM_BASIC || '300–1,000 Br', desc: 'Quick STEM or short slide deck', delivery: '24hr delivery', bullets: ['Step-by-step working shown', 'Handwritten or typed proofs', '10-slide deck', 'Standard formatting'] },
+        { name: 'Standard', range: env.VITE_PRICE_STEM_STANDARD || '$30–$60', etbRange: env.VITE_PRICE_ETB_STEM_STANDARD || '1,000–2,500 Br', desc: 'Physics/biochem or full deck', delivery: '48hr delivery', bullets: ['Code files if needed', 'Rigorous written steps', '20 designed slides', 'Custom charts and icons'] },
+        { name: 'Premium', range: env.VITE_PRICE_STEM_PREMIUM || '$60–$120+', etbRange: env.VITE_PRICE_ETB_STEM_PREMIUM || '2,500–5,000+ Br', desc: 'Advanced proofs or pitch decks', delivery: 'Custom timeline', bullets: ['Grad-level derivations', 'Interactive plots', 'Investor-ready layouts', 'Speaker notes included'] }
       ]
     }
   };
 
   const faqs = [
     {
-      q: 'How do I pay for my project?',
-      a: 'We accept secure credit card payments, PayPal, and international wire transfers. For larger projects (above $150), we offer a flexible 50% milestone payment structure where you pay 50% upfront to initiate work and 50% once the project review draft is delivered.'
+      q: 'How do I pay?',
+      a: 'We accept bank transfers (CBE, TeleBirr, BOA), crypto (USDT, BTC), and card. For projects above $150 we split it 50/50 — half to start, half on delivery.'
     },
     {
       q: 'Is my order confidential?',
-      a: 'Your confidentiality is our absolute, foundational priority. All files, metadata, emails, and client records are completely encrypted. We never share student details, and completed work is handed directly to you without ever being uploaded to public indexers or plagiarism detection search libraries.'
+      a: 'Yes. We don\'t share your name, email, or files with anyone. Finished work goes directly to you and is never uploaded to plagiarism libraries or public databases.'
     },
     {
-      q: 'What if I am not satisfied with the work?',
-      a: 'If the delivered work deviates from your original instructions, we will revise it for free. You have an unlimited revisions guarantee for 14 days after delivery. Simply request a revision through your dashboard detailing the specific changes needed.'
+      q: 'What if I\'m not happy with the work?',
+      a: 'We revise it for free. You have 14 days after delivery to request changes — just describe what needs to be different and we\'ll fix it.'
     },
     {
       q: 'How fast can you deliver?',
-      a: 'We offer extreme high-speed turnarounds. For STEM assignments and presentations, we can deliver within 24 hours. Most standard projects have an average delivery of 48 hours.'
+      a: 'STEM problems and short presentations can be done within 24 hours. Most projects are 48–72 hours. If you have a tight deadline, message us first and we\'ll confirm before you order.'
     },
     {
-      q: 'Do you offer custom quotes for multi-disciplinary projects?',
-      a: 'Absolutely. If your project blends coding, data analysis, and technical report writing, use the Free Quote form below or chat with us on WhatsApp for a combined quote.'
+      q: 'My project mixes several subjects — can you quote me?',
+      a: 'Yes. Use the quote form below or message us on WhatsApp. Tell us what you need and we\'ll send a combined price.'
     }
   ];
 
@@ -131,7 +132,6 @@ export default function Pricing({ setCurrentPage, setSelectedServiceType, showTo
       setSelectedServiceType(serviceType);
     }
     setCurrentPage('order');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleQuoteSubmit = async (e: React.FormEvent) => {
@@ -155,7 +155,7 @@ export default function Pricing({ setCurrentPage, setSelectedServiceType, showTo
     setQuoteDeadline('');
 
     if (showToast) {
-      showToast('Custom quote request submitted successfully! We will email you within 2 hours.', 'success');
+      showToast('Quote request sent. We will email you within a few hours.', 'success');
     }
   };
 
@@ -232,7 +232,7 @@ export default function Pricing({ setCurrentPage, setSelectedServiceType, showTo
                 {/* Price Display */}
                 <div className="flex items-baseline text-white">
                   <span className={`text-3xl sm:text-4xl md:text-5xl font-black tracking-tight ${idx === 1 ? 'text-amber-400' : 'text-amber-500'}`}>
-                    {formatPriceRange(tier.range)}
+                    {formatPriceRange(tier)}
                   </span>
                 </div>
  

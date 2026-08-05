@@ -43,7 +43,23 @@ async function uploadBase64FileToStorage(base64Data: string, fileName: string): 
   }
 
   const storagePath = `uploads/${crypto.randomUUID()}.${ext}`;
-  const buffer = Buffer.from(rawBase64, 'base64');
+  let buffer = Buffer.from(rawBase64, 'base64');
+
+  // Sanitize SVG uploads to prevent stored XSS
+  if (mimeType === 'image/svg+xml') {
+    let svgContent = buffer.toString('utf-8');
+    // Strip <script> tags and their content
+    svgContent = svgContent.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+    // Strip <foreignObject> tags and their content
+    svgContent = svgContent.replace(/<foreignObject\b[^<]*(?:(?!<\/foreignObject>)<[^<]*)*<\/foreignObject>/gi, '');
+    // Strip event handler attributes (onclick, onload, onerror, etc.)
+    svgContent = svgContent.replace(/\son\w+\s*=\s*(?:"[^"]*"|'[^']*')/gi, '');
+    // Strip javascript: URIs
+    svgContent = svgContent.replace(/javascript\s*:/gi, '');
+    // Strip data: URIs in href/xlink:href (except safe ones)
+    svgContent = svgContent.replace(/(href|xlink:href)\s*=\s*(?:"data:[^"]*"|'data:[^']*')/gi, '');
+    buffer = Buffer.from(svgContent, 'utf-8');
+  }
 
   if (buffer.length > 10 * 1024 * 1024) {
     throw new Error('File size exceeds 10MB limit');

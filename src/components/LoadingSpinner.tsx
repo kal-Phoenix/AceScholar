@@ -15,26 +15,13 @@ export default function LoadingSpinner({ size = 'md', text, className = '' }: Lo
 
   return (
     <div className={`flex flex-col items-center justify-center gap-3 ${className}`}>
-      <Loader2 className={`${sizeClasses[size]} text-amber-500 animate-spin`} />
+      <div className="relative">
+        <Loader2 className={`${sizeClasses[size]} text-amber-500 animate-spin`} />
+        <div className="absolute inset-0 bg-amber-500/20 rounded-full blur-md animate-pulse"></div>
+      </div>
       {text && (
         <p className="text-xs text-slate-400 font-semibold tracking-wide">{text}</p>
       )}
-    </div>
-  );
-}
-
-export function PageLoader({ text = 'Loading...' }: { text?: string }) {
-  return (
-    <div className="flex items-center justify-center py-20 bg-slate-900/40 border border-slate-800/80 rounded-2xl">
-      <LoadingSpinner size="lg" text={text} />
-    </div>
-  );
-}
-
-export function InlineLoader({ text }: { text?: string }) {
-  return (
-    <div className="flex items-center justify-center py-8">
-      <LoadingSpinner size="sm" text={text} />
     </div>
   );
 }

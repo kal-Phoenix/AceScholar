@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
-import { paymentConfig, generatePaymentId, getRequesterProfile } from '../lib/utils.js';
+import { paymentConfig, generatePaymentId, getRequesterProfile, isOrderAccessibleToExpert, getAdminCutPercent } from '../lib/utils.js';
 import { db } from '../lib/supabase.js';
 import { safeString } from '../lib/validation.js';
 
@@ -20,8 +20,9 @@ async function processPaymentRecord({
     throw new Error('Payment amount must be greater than zero.');
   }
 
-  const admin_cut = Number((amount * 0.10).toFixed(2));
-  const expert_amount = Number((amount * 0.90).toFixed(2));
+  const adminCutPercent = getAdminCutPercent();
+  const admin_cut = Number((amount * adminCutPercent / 100).toFixed(2));
+  const expert_amount = Number((amount * (100 - adminCutPercent) / 100).toFixed(2));
   const payId = generatePaymentId();
 
   const newPayment = {
@@ -89,6 +90,10 @@ router.post('/', async (req: Request, res: Response) => {
         order.client_email?.toLowerCase() !== requester.email.toLowerCase()) {
       return res.status(403).json({ error: 'You can only submit payments for your own orders' });
     }
+    // Experts cannot submit payments — only clients can
+    if (requester.role === 'expert') {
+      return res.status(403).json({ error: 'Experts cannot submit payments' });
+    }
 
     if (payment_screenshot) {
       // Store screenshot, mark payment as pending for admin review
@@ -105,6 +110,20 @@ router.post('/', async (req: Request, res: Response) => {
     const finalCurrency = currency || order.currency || 'USD';
     const referenceId = `${provider_id.toUpperCase()}-REF-${crypto.randomUUID().replace(/-/g, '').substring(0, 12)}`;
 
+    // Validate the submitted amount is within a reasonable range of the order total.
+    // The agreed_price (payment-after-delivery) takes precedence over total_amount.
+    const expectedAmount: number = order.agreed_price ?? order.total_amount ?? 0;
+    if (expectedAmount > 0 && finalAmount < expectedAmount * 0.5) {
+      return res.status(400).json({
+        error: `Payment amount (${finalAmount}) is too low. Expected approximately ${expectedAmount} ${finalCurrency}.`,
+      });
+    }
+    if (expectedAmount > 0 && finalAmount > expectedAmount * 1.5) {
+      return res.status(400).json({
+        error: `Payment amount (${finalAmount}) is too high. Expected approximately ${expectedAmount} ${finalCurrency}.`,
+      });
+    }
+
     const payment = await processPaymentRecord({
       order_id, provider_id, amount: finalAmount, currency: finalCurrency,
       reference_id: referenceId, phone_number: phone_number || null
@@ -117,24 +136,67 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// GET payment configuration (public — no auth required)
+// GET payment configuration (public — includes account details for display, crypto addresses masked)
 router.get('/config', (_req: Request, res: Response) => {
-  res.json(paymentConfig());
+  const fullConfig = paymentConfig();
+  res.json({
+    providers: fullConfig.providers,
+    ethiopia: fullConfig.ethiopia,
+    crypto: {
+      discountPercent: fullConfig.crypto.discountPercent,
+      assets: fullConfig.crypto.assets.map(a => ({
+        ...a,
+        networks: a.networks.map(n => ({ name: n.name, address: '***' })),
+      })),
+    },
+    card: fullConfig.card,
+  });
 });
 
-// GET all payments (admin only)
-router.get('/', async (req: Request, res: Response) => {
+// GET full payment config (admin only — includes account details)
+router.get('/config/full', async (req: Request, res: Response) => {
   try {
     const requester = await getRequesterProfile(req);
     if (!requester || requester.role !== 'admin') {
-      return res.status(403).json({ error: 'Unauthorized. Admin credentials required.' });
+      return res.status(403).json({ error: 'Admin access required' });
     }
+    res.json(paymentConfig());
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET all payments (admin sees all; experts see only payments for their assigned orders)
+router.get('/', async (req: Request, res: Response) => {
+  try {
+    const requester = await getRequesterProfile(req);
+    if (!requester) return res.status(401).json({ error: 'Authentication required' });
+
+    if (requester.role === 'admin') {
+      const { data, error } = await db
+        .from('payments')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) return res.status(500).json({ error: 'Failed to fetch payments' });
+      return res.json(data || []);
+    }
+
+    // Expert: fetch all orders and filter using fuzzy matching (same logic as orders endpoint)
+    const { data: allOrders, error: ordersErr } = await db
+      .from('orders')
+      .select('id');
+    if (ordersErr) return res.status(500).json({ error: 'Failed to fetch orders' });
+
+    const orderIds = (allOrders || [])
+      .filter((o: any) => isOrderAccessibleToExpert(o, requester.email, requester.full_name))
+      .map((o: any) => o.id);
+    if (orderIds.length === 0) return res.json([]);
 
     const { data, error } = await db
       .from('payments')
       .select('*')
+      .in('order_id', orderIds)
       .order('created_at', { ascending: false });
-
     if (error) return res.status(500).json({ error: 'Failed to fetch payments' });
     res.json(data || []);
   } catch (err) {

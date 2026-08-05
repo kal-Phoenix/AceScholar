@@ -1,25 +1,7 @@
-import path from 'path';
-import fs from 'fs';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Load .env directly here to guarantee it's available before reading process.env
-const envPath = path.resolve(process.cwd(), '.env');
-if (fs.existsSync(envPath)) {
-  const envFile = fs.readFileSync(envPath, 'utf8');
-  envFile.split(/\r?\n/).forEach((line) => {
-    if (!line || line.startsWith('#') || !line.includes('=')) return;
-    const [key, ...valueParts] = line.split('=');
-    const cleanKey = key.trim();
-    let cleanVal = valueParts.join('=').trim();
-    if ((cleanVal.startsWith('"') && cleanVal.endsWith('"')) ||
-        (cleanVal.startsWith("'") && cleanVal.endsWith("'"))) {
-      cleanVal = cleanVal.slice(1, -1);
-    }
-    if (!process.env[cleanKey]) {
-      process.env[cleanKey] = cleanVal;
-    }
-  });
-}
+// .env is loaded by server/lib/load-env.ts (imported first in server/index.ts).
+// This module only reads process.env — no duplicate parsing needed.
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
 const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
@@ -28,8 +10,6 @@ const supabaseServiceKey =
   process.env.SERVICE_ROLE_KEY ||
   process.env.SUPABASE_SERVICE_KEY ||
   '';
-
-console.log('[supabase] SUPABASE_SERVICE_ROLE_KEY:', supabaseServiceKey ? 'SET' : 'MISSING');
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error(
@@ -52,7 +32,14 @@ export const supabaseAdmin: SupabaseClient | null = supabaseServiceKey
     })
   : null;
 
+if (!supabaseServiceKey) {
+  console.warn(
+    'WARNING: SUPABASE_SERVICE_ROLE_KEY is not set. Admin operations (sync, role updates, etc.) will fail.\n' +
+    'Set SUPABASE_SERVICE_ROLE_KEY in your .env file.'
+  );
+}
+
 // Use admin client when available, fall back to anon client for reads
 export const db: SupabaseClient = supabaseAdmin || supabase;
 
-export { supabaseUrl, supabaseAnonKey };
+export { supabaseUrl };

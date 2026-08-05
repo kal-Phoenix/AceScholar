@@ -7,6 +7,18 @@ import crypto from 'crypto';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 
+// Global error handlers — must be registered before any async work
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled Promise Rejection:', reason);
+  // Exit after a short delay to allow logs to flush — the process is in an undefined state
+  setTimeout(() => process.exit(1), 1000);
+});
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  // Give the server time to finish pending requests before exiting
+  setTimeout(() => process.exit(1), 1000);
+});
+
 
 // Route imports
 import authRoutes from './routes/auth.js';
@@ -16,6 +28,10 @@ import profileRoutes from './routes/profiles.js';
 import messageRoutes from './routes/messages.js';
 import contactRoutes from './routes/contacts.js';
 import uploadRoutes from './routes/upload.js';
+import withdrawalRoutes from './routes/withdrawals.js';
+import ratingRoutes from './routes/ratings.js';
+import notificationRoutes from './routes/notifications.js';
+import analyticsRoutes from './routes/analytics.js';
 
 async function startServer() {
   const app = express();
@@ -27,11 +43,11 @@ async function startServer() {
     contentSecurityPolicy: process.env.NODE_ENV === 'production' ? {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
         imgSrc: ["'self'", "data:", "https:", "blob:"],
-        connectSrc: ["'self'", "https://knrkywdpjhxcnhevwyad.supabase.co"],
+        connectSrc: ["'self'", process.env.VITE_SUPABASE_URL || ''],
         frameSrc: ["'none'"],
         objectSrc: ["'none'"],
       },
@@ -40,8 +56,8 @@ async function startServer() {
     crossOriginEmbedderPolicy: false,
   }));
 
-  app.use(express.json({ limit: '10mb' }));
-  app.use(express.urlencoded({ limit: '10mb', extended: true }));
+  app.use(express.json({ limit: '2mb' }));
+  app.use(express.urlencoded({ limit: '2mb', extended: false }));
 
   // CORS — default-deny policy
   const allowedOrigin = process.env.ALLOWED_ORIGIN;
@@ -88,12 +104,20 @@ async function startServer() {
     message: { error: 'Too many attempts to this endpoint. Please try again later.' },
   });
 
-  const loginRateLimiter = rateLimit({
+  const messageRateLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    limit: 5,
+    limit: 100,
     standardHeaders: 'draft-7',
     legacyHeaders: false,
-    message: { error: 'Too many login attempts. Please try again after 15 minutes.' },
+    message: { error: 'Too many messages. Please slow down.' },
+  });
+
+  const loginRateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 20,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { error: 'Too many login attempts. Please try again later.' },
   });
 
   const signupRateLimiter = rateLimit({
@@ -104,11 +128,26 @@ async function startServer() {
     message: { error: 'Too many signup attempts. Please try again later.' },
   });
 
+  const passwordResetRateLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    limit: 5,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { error: 'Too many password reset attempts. Please try again later.' },
+  });
+
   app.use(baseRateLimiter);
   app.use('/api/auth/login', loginRateLimiter);
   app.use('/api/auth/signup', signupRateLimiter);
+  app.use('/api/auth/forgot-password', passwordResetRateLimiter);
+  app.use('/api/auth/reset-password', passwordResetRateLimiter);
   app.use('/api/payments', sensitiveRateLimiter);
   app.use('/api/contacts', sensitiveRateLimiter);
+  app.use('/api/messages', messageRateLimiter);
+  app.use('/api/withdrawals', sensitiveRateLimiter);
+  app.use('/api/ratings', sensitiveRateLimiter);
+  app.use('/api/notifications', sensitiveRateLimiter);
+  app.use('/api/analytics', sensitiveRateLimiter);
 
   const syncRateLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -148,12 +187,16 @@ async function startServer() {
   app.use('/api/messages', messageRoutes);
   app.use('/api/contacts', contactRoutes);
   app.use('/api/upload', uploadRoutes);
+  app.use('/api/withdrawals', withdrawalRoutes);
+  app.use('/api/ratings', ratingRoutes);
+  app.use('/api/notifications', notificationRoutes);
+  app.use('/api/analytics', analyticsRoutes);
 
   // ─────────────────────────────────────────────────────────────────────────
   // SYNC ENDPOINTS (bulk upsert — kept inline for simplicity)
   // ─────────────────────────────────────────────────────────────────────────
   const { supabase, supabaseAdmin, db } = await import('./lib/supabase.js');
-  const { safeString } = await import('./lib/validation.js');
+  const { sanitizeText, MAX_LENGTHS } = await import('./lib/validation.js');
   const { getRequesterProfile } = await import('./lib/utils.js');
 
   app.post('/api/orders/sync', async (req, res) => {
@@ -165,49 +208,49 @@ async function startServer() {
       if (!Array.isArray(req.body)) return res.status(400).json({ error: 'Body must be an array of orders' });
 
       const sanitized = req.body.map((item: any) => ({
-        id: safeString(item.id) || 'ord-' + Math.random().toString(36).substring(2, 7),
+        id: sanitizeText(item.id, MAX_LENGTHS.id) || 'ord-' + crypto.randomUUID().replace(/-/g, '').substring(0, 12),
         client_id: item.client_id || null,
-        client_name: safeString(item.client_name, 'Anonymous'),
-        client_email: safeString(item.client_email),
-        service_type: safeString(item.service_type, 'General / Unspecified'),
-        subject: safeString(item.subject, 'General / Unspecified'),
-        academic_level: safeString(item.academic_level, 'Undergraduate'),
-        deadline: safeString(item.deadline),
-        description: safeString(item.description),
-        special_instructions: item.special_instructions ? safeString(item.special_instructions) : null,
-        budget_range: safeString(item.budget_range, '$50-$100'),
+        client_name: sanitizeText(item.client_name, MAX_LENGTHS.name) || 'Anonymous',
+        client_email: sanitizeText(item.client_email, MAX_LENGTHS.email),
+        service_type: sanitizeText(item.service_type, MAX_LENGTHS.service_type) || 'General / Unspecified',
+        subject: sanitizeText(item.subject, MAX_LENGTHS.subject) || 'General / Unspecified',
+        academic_level: sanitizeText(item.academic_level, MAX_LENGTHS.general) || 'Undergraduate',
+        deadline: sanitizeText(item.deadline, 60),
+        description: sanitizeText(item.description, MAX_LENGTHS.description),
+        special_instructions: item.special_instructions ? sanitizeText(item.special_instructions, MAX_LENGTHS.instructions) : null,
+        budget_range: sanitizeText(item.budget_range, MAX_LENGTHS.budget) || '$50-$100',
         status: (['pending','in_progress','under_review','delivered','revision_requested'].includes(item.status)) ? item.status : 'pending',
-        assigned_to: item.assigned_to ? safeString(item.assigned_to) : null,
+        assigned_to: item.assigned_to ? sanitizeText(item.assigned_to, MAX_LENGTHS.name) : null,
         expert_accepted: item.expert_accepted !== undefined ? Boolean(item.expert_accepted) : null,
-        file_url: item.file_url ? safeString(item.file_url) : null,
-        file_name: item.file_name ? safeString(item.file_name) : null,
-        delivery_url: item.delivery_url ? safeString(item.delivery_url) : null,
-        delivery_name: item.delivery_name ? safeString(item.delivery_name) : null,
-        internal_notes: item.internal_notes ? safeString(item.internal_notes) : null,
-        created_at: safeString(item.created_at) || new Date().toISOString(),
-        payment_method: item.payment_method ? safeString(item.payment_method) : null,
-        payment_screenshot: item.payment_screenshot ? safeString(item.payment_screenshot) : null,
+        file_url: item.file_url ? sanitizeText(item.file_url, MAX_LENGTHS.url) : null,
+        file_name: item.file_name ? sanitizeText(item.file_name, MAX_LENGTHS.filename) : null,
+        delivery_url: item.delivery_url ? sanitizeText(item.delivery_url, MAX_LENGTHS.url) : null,
+        delivery_name: item.delivery_name ? sanitizeText(item.delivery_name, MAX_LENGTHS.filename) : null,
+        internal_notes: item.internal_notes ? sanitizeText(item.internal_notes, MAX_LENGTHS.notes) : null,
+        created_at: sanitizeText(item.created_at, 60) || new Date().toISOString(),
+        payment_method: item.payment_method ? sanitizeText(item.payment_method, MAX_LENGTHS.general) : null,
+        payment_screenshot: item.payment_screenshot ? sanitizeText(item.payment_screenshot, MAX_LENGTHS.url) : null,
         payment_status: (['pending','approved','rejected'].includes(item.payment_status)) ? item.payment_status : 'pending',
-        payment_ref_number: item.payment_ref_number ? safeString(item.payment_ref_number) : null,
-        payment_id: item.payment_id ? safeString(item.payment_id) : null,
+        payment_ref_number: item.payment_ref_number ? sanitizeText(item.payment_ref_number, MAX_LENGTHS.general) : null,
+        payment_id: item.payment_id ? sanitizeText(item.payment_id, MAX_LENGTHS.id) : null,
         total_amount: typeof item.total_amount === 'number' ? item.total_amount : 100,
-        currency: safeString(item.currency, 'USD'),
+        currency: sanitizeText(item.currency, MAX_LENGTHS.currency) || 'USD',
         applicants: Array.isArray(item.applicants) ? item.applicants : null,
         // Payment-after-delivery fields (proper columns)
         agreed_price: typeof item.agreed_price === 'number' ? item.agreed_price : null,
-        preview_url: item.preview_url ? safeString(item.preview_url) : null,
-        preview_name: item.preview_name ? safeString(item.preview_name) : null,
+        preview_url: item.preview_url ? sanitizeText(item.preview_url, MAX_LENGTHS.url) : null,
+        preview_name: item.preview_name ? sanitizeText(item.preview_name, MAX_LENGTHS.filename) : null,
         payment_awaiting: Boolean(item.payment_awaiting) || false,
-        payment_method_type: item.payment_method_type ? safeString(item.payment_method_type) : null,
+        payment_method_type: item.payment_method_type ? sanitizeText(item.payment_method_type, MAX_LENGTHS.general) : null,
         crypto_discount_applied: Boolean(item.crypto_discount_applied) || false,
         delivery_released: Boolean(item.delivery_released) || false,
-        expert_submission_url: item.expert_submission_url ? safeString(item.expert_submission_url) : null,
-        expert_submission_name: item.expert_submission_name ? safeString(item.expert_submission_name) : null,
+        expert_submission_url: item.expert_submission_url ? sanitizeText(item.expert_submission_url, MAX_LENGTHS.url) : null,
+        expert_submission_name: item.expert_submission_name ? sanitizeText(item.expert_submission_name, MAX_LENGTHS.filename) : null,
         admin_screenshots: Array.isArray(item.admin_screenshots) ? item.admin_screenshots : null,
       }));
 
       const { error: upsertErr } = await db.from('orders').upsert(sanitized);
-      if (upsertErr) return res.status(500).json({ error: upsertErr.message });
+      if (upsertErr) return res.status(500).json({ error: 'Failed to sync orders' });
       res.json({ success: true, count: sanitized.length });
     } catch (err) {
       console.error('Sync error:', err);
@@ -227,15 +270,16 @@ async function startServer() {
 
       const allUsers = await getCachedUsers();
       for (const item of req.body) {
-        const email = safeString(item.email);
+        const email = sanitizeText(item.email, MAX_LENGTHS.email);
         if (!email) continue;
         const user = allUsers?.find((u: any) => u.email?.toLowerCase() === email.toLowerCase());
         if (user) {
+          const allowedRole = (item.role === 'client' || item.role === 'expert') ? item.role : 'client';
           await (supabaseAdmin || supabase).auth.admin.updateUserById(user.id, {
             user_metadata: {
               ...user.user_metadata,
-              full_name: safeString(item.full_name, user.user_metadata?.full_name || 'Anonymous'),
-              role: item.role || user.user_metadata?.role || 'client',
+              full_name: sanitizeText(item.full_name, MAX_LENGTHS.name) || user.user_metadata?.full_name || 'Anonymous',
+              role: allowedRole,
             }
           });
         }
@@ -243,6 +287,7 @@ async function startServer() {
       invalidateUserCache();
       res.json({ success: true, count: req.body.length });
     } catch (err) {
+      console.error('Profiles sync error:', err);
       res.status(500).json({ error: 'Internal server error during profiles sync' });
     }
   });
@@ -257,18 +302,22 @@ async function startServer() {
 
       const sanitized = req.body.map((item: any) => ({
         id: item.id || crypto.randomUUID(),
-        order_id: safeString(item.order_id),
+        order_id: sanitizeText(item.order_id, MAX_LENGTHS.id),
         sender_id: item.sender_id || null,
-        sender_name: safeString(item.sender_name, 'Anonymous'),
-        content: safeString(item.content),
+        sender_name: sanitizeText(item.sender_name, MAX_LENGTHS.name) || 'Anonymous',
+        content: sanitizeText(item.content, MAX_LENGTHS.message),
         is_admin: Boolean(item.is_admin),
-        created_at: safeString(item.created_at) || new Date().toISOString(),
+        created_at: sanitizeText(item.created_at, 60) || new Date().toISOString(),
       }));
 
       const { error } = await db.from('messages').upsert(sanitized);
-      if (error) return res.status(500).json({ error: error.message });
+      if (error) {
+        console.error('Messages sync error:', error.message);
+        return res.status(500).json({ error: 'Failed to sync messages' });
+      }
       res.json({ success: true, count: sanitized.length });
     } catch (err) {
+      console.error('Messages sync error:', err);
       res.status(500).json({ error: 'Internal server error during messages sync' });
     }
   });
@@ -283,20 +332,32 @@ async function startServer() {
 
       const sanitized = req.body.map((item: any) => ({
         id: item.id || crypto.randomUUID(),
-        name: safeString(item.name, 'Anonymous'),
-        email: safeString(item.email),
-        subject: safeString(item.subject),
-        message: safeString(item.message),
+        name: sanitizeText(item.name, MAX_LENGTHS.name) || 'Anonymous',
+        email: sanitizeText(item.email, MAX_LENGTHS.email),
+        subject: sanitizeText(item.subject, MAX_LENGTHS.subject),
+        message: sanitizeText(item.message, MAX_LENGTHS.message),
         is_read: Boolean(item.is_read),
-        created_at: safeString(item.created_at) || new Date().toISOString(),
+        created_at: sanitizeText(item.created_at, 60) || new Date().toISOString(),
       }));
 
       const { error } = await db.from('contact_messages').upsert(sanitized);
-      if (error) return res.status(500).json({ error: error.message });
+      if (error) {
+        console.error('Contacts sync error:', error.message);
+        return res.status(500).json({ error: 'Failed to sync contacts' });
+      }
       res.json({ success: true, count: sanitized.length });
     } catch (err) {
+      console.error('Contacts sync error:', err);
       res.status(500).json({ error: 'Internal server error during contacts sync' });
     }
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 404 catch-all for unknown API routes — must come BEFORE the SPA fallback
+  // so that unknown /api/... paths return JSON, not index.html
+  // ─────────────────────────────────────────────────────────────────────────
+  app.use('/api', (_req, res) => {
+    res.status(404).json({ error: 'API endpoint not found' });
   });
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -312,23 +373,12 @@ async function startServer() {
     console.log('Running in development mode with Vite middleware');
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, { maxAge: '1y', immutable: true }));
     app.get('*', (_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
     console.log('Running in production mode serving static dist/');
   }
-
-  // 404 catch-all for unknown API routes
-  app.use('/api/*', (_req, res) => {
-    res.status(404).json({ error: 'API endpoint not found' });
-  });
-
-  // Global error handler
-  app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-    console.error('Unhandled server exception:', err);
-    res.status(500).json({ error: 'An unexpected server error occurred.' });
-  });
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server listening on http://0.0.0.0:${PORT}`);

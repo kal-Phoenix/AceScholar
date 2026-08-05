@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { ShieldCheck, FileText, Check, Trash2, Mail, Users, RefreshCw, Clock, Upload, Download, X, Sparkles, Paperclip, Coins, DollarSign, TrendingUp, Copy } from 'lucide-react';
-import { PageType, Profile, Order as AcademicOrder, Message, ContactMessage, Payment } from '../types';
+import React, { useState, useEffect } from 'react';
+import { ShieldCheck, FileText, Check, Trash2, Mail, Users, RefreshCw, Clock, Upload, Download, X, Sparkles, Paperclip, Coins, DollarSign, TrendingUp, Copy, MessageSquare, Send, BarChart3, Star, ArrowDownToLine, CheckCircle } from 'lucide-react';
+import { PageType, Profile, Order as AcademicOrder, Message, ContactMessage, Payment, Withdrawal, Rating } from '../types';
 import { fallbackDb, getAuthHeaders } from '../lib/supabase';
+import { POLLING_INTERVAL_MS, REVISION_DEADLINE_MS, DEFAULT_EXCHANGE_RATES } from '../lib/constants';
+import NotificationBell from './NotificationBell';
 
 interface AdminProps {
   user: Profile | null;
@@ -10,12 +12,22 @@ interface AdminProps {
 }
 
 export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
+  const ETB_RATE = DEFAULT_EXCHANGE_RATES.ETB?.rate || 120;
   const [orders, setOrders] = useState<AcademicOrder[]>([]);
   const [contactMessages, setContactMessages] = useState<ContactMessage[]>([]);
-  const [activeTab, setActiveTab] = useState<'orders' | 'messages' | 'applications' | 'payments'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'messages' | 'applications' | 'payments' | 'withdrawals' | 'analytics' | 'ratings'>('orders');
   const [applications, setApplications] = useState<any[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [paymentsSearch, setPaymentsSearch] = useState('');
+  const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
+  const [ratings, setRatings] = useState<Rating[]>([]);
+  const [analytics, setAnalytics] = useState<any>(null);
+  const [, setSelectedWithdrawal] = useState<Withdrawal | null>(null);
+
+  // Withdrawal approval screenshot state
+  const [withdrawalApprovingId, setWithdrawalApprovingId] = useState<string | null>(null);
+  const [withdrawalScreenshotFile, setWithdrawalScreenshotFile] = useState<File | null>(null);
+  const [isApprovingWithdrawal, setIsApprovingWithdrawal] = useState(false);
   
   // Selected focus states
   const [selectedOrder, setSelectedOrder] = useState<AcademicOrder | null>(null);
@@ -35,8 +47,11 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
 
   // Chat/Messaging Thread states
   const [messages, setMessages] = useState<Message[]>([]);
-
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [typedMessage, setTypedMessage] = useState('');
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [orderDetailTab, setOrderDetailTab] = useState<'overview' | 'chat' | 'chat-expert'>('overview');
+  const [selectedApplicantProfile, setSelectedApplicantProfile] = useState<any>(null);
+  const [showApplicantModal, setShowApplicantModal] = useState(false);
 
   const fetchApplications = (allProfiles: Profile[]) => {
     const apps = allProfiles
@@ -57,7 +72,15 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
         experience: p.expert_proposal || '',
         created_at: p.expert_signup_at || p.created_at,
         status: p.expert_status || 'pending',
-        documents: p.expert_documents || []
+        documents: p.expert_documents || [],
+        institution: p.institution || '',
+        graduation_year: p.graduation_year || '',
+        field_of_study: p.field_of_study || '',
+        software: p.software || '',
+        languages: p.languages || '',
+        portfolio_url: p.portfolio_url || '',
+        availability: p.availability || '',
+        referral: p.referral || '',
       }));
     apps.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     setApplications(apps);
@@ -141,17 +164,23 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
   const fetchAdminData = async () => {
     setIsLoading(true);
     try {
-      const [ordersResult, contactsResult, profilesResult, allPayments] = await Promise.all([
+      const [ordersResult, contactsResult, profilesResult, allPayments, withdrawalsData, ratingsData, analyticsData] = await Promise.all([
         fallbackDb.getOrders(1, 500),
         fallbackDb.getContactMessages(1, 500),
         fallbackDb.getProfiles(1, 500),
-        fallbackDb.getPayments()
+        fallbackDb.getPayments(),
+        fallbackDb.getWithdrawals(),
+        fallbackDb.getRatings(),
+        fallbackDb.getAnalytics(),
       ]);
       const allOrders = ordersResult.data;
       setOrders(allOrders);
       setContactMessages(contactsResult.data);
       // profiles updated from allProfiles
       setPayments(allPayments || []);
+      setWithdrawals(withdrawalsData);
+      setRatings(ratingsData);
+      setAnalytics(analyticsData);
       fetchApplications(profilesResult.data);
 
       // Refresh currently selected order references
@@ -179,6 +208,23 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
     }
   };
 
+  const handleWithdrawalAction = async (id: string, status: 'approved' | 'rejected', note?: string, screenshot?: string) => {
+    try {
+      const result = await fallbackDb.updateWithdrawal(id, status, note, screenshot);
+      if (result) {
+        if (showToast) showToast(`Withdrawal ${status}`, 'success');
+        setSelectedWithdrawal(null);
+        setWithdrawalApprovingId(null);
+        setWithdrawalScreenshotFile(null);
+        await fetchAdminData();
+      } else {
+        if (showToast) showToast('Failed to update withdrawal.', 'error');
+      }
+    } catch (e) {
+      if (showToast) showToast('Failed to update withdrawal.', 'error');
+    }
+  };
+
   useEffect(() => {
     fetchAdminData();
   }, []);
@@ -190,11 +236,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
     }
   }, [selectedOrder]);
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  const handleAcceptExpertApplicant = async (applicantEmail: string, applicantName: string) => {
+  const handleAcceptExpertApplicant = async (_applicantEmail: string, applicantName: string) => {
     if (!selectedOrder) return;
     try {
       // Use targeted PUT endpoint instead of bulk sync
@@ -208,22 +250,6 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
         setOrders(prev => prev.map(o => o.id === selectedOrder.id ? updatedOrder : o));
         setSelectedOrder(updatedOrder);
       }
-
-      // Post system notification to chat
-      await fallbackDb.postMessage({
-        order_id: selectedOrder.id,
-        sender_name: 'Ace Scholar System',
-        content: `🎉 Specialist allocated! ${applicantName} (${applicantEmail}) has been assigned. They are now starting your task!`,
-        is_admin: true,
-      });
-      setMessages(prev => [...prev, {
-        id: 'msg-' + Math.random().toString(36).substring(2, 9),
-        order_id: selectedOrder.id,
-        sender_name: 'Ace Scholar System',
-        content: `🎉 Specialist allocated! ${applicantName} (${applicantEmail}) has been assigned.`,
-        is_admin: true,
-        created_at: new Date().toISOString()
-      }]);
 
       if (showToast) showToast(`Specialist ${applicantName} accepted and allocated successfully!`, 'success');
     } catch (e) {
@@ -252,7 +278,9 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
     setIsSubmittingDelivery(true);
     try {
       const isAlreadyApproved = selectedOrder.payment_status === 'approved';
-      // Update order status and delivery details via backend
+      // Set revision deadline to 48 hours from now
+      const revisionDeadline = new Date(Date.now() + REVISION_DEADLINE_MS).toISOString();
+
       const res = await fetch(`/api/orders/${selectedOrder.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
@@ -260,7 +288,10 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
           status: 'delivered',
           delivery_name: deliveryFileName,
           delivery_url: deliveryFileContent || undefined,
-          delivery_released: isAlreadyApproved
+          delivery_released: isAlreadyApproved,
+          revision_deadline: revisionDeadline,
+          revision_count: selectedOrder.revision_count || 0,
+          max_revisions: selectedOrder.max_revisions || 2,
         }),
       });
 
@@ -270,16 +301,6 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
       }
 
       const updatedOrder = await res.json();
-
-      // Notify client via message thread
-      await fallbackDb.postMessage({
-        order_id: selectedOrder.id,
-        sender_name: 'Academic Coordinator Desk',
-        sender_id: 'system',
-        content: `🎉 [Academic Deliverable Uploaded] Final work file has been uploaded: "${deliveryFileName}". ` + 
-                 (isAlreadyApproved ? "It is unlocked and ready for download!" : "It will be released immediately after payment verification."),
-        is_admin: true,
-      });
 
       // Local state sync
       setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, ...updatedOrder } : o));
@@ -331,19 +352,6 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
       // Reflect locally without a full reload
       setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, ...updatedOrder } : o));
       setSelectedOrder(prev => prev ? { ...prev, ...updatedOrder } : null);
-
-      // Notify client
-      const noticeContent = verdict === 'approved'
-        ? `✅ [Payment Confirmed] Your bank transfer has been verified and approved by our coordinator. Your order is now active and a specialist will begin work shortly.`
-        : `❌ [Payment Rejected] Your bank transfer receipt could not be verified. Please re-submit your payment screenshot or contact support for assistance.`;
-
-      await fallbackDb.postMessage({
-        order_id: selectedOrder.id,
-        sender_name: 'Academic Coordinator Desk',
-        sender_id: 'system',
-        content: noticeContent,
-        is_admin: true,
-      });
 
       if (showToast) showToast(
         verdict === 'approved' ? 'Payment approved — 10% admin cut recorded.' : 'Payment rejected and client notified.',
@@ -407,15 +415,6 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const updatedOrder = await res.json();
 
-      // 2. Post completion & payment request message to chat
-      await fallbackDb.postMessage({
-        order_id: selectedOrder.id,
-        sender_name: 'Academic Coordinator Desk',
-        sender_id: 'system',
-        content: `✅ [Assignment Completed] Your assignment has been reviewed by our coordinators and is ready. Please check the preview screenshots in your dashboard and proceed to payment to download your final files.`,
-        is_admin: true,
-      });
-
       setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, ...updatedOrder } : o));
       setSelectedOrder(prev => prev ? { ...prev, ...updatedOrder } : null);
       if (showToast) showToast('Student notified and payment requested!', 'success');
@@ -425,6 +424,41 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
       if (showToast) showToast('Failed to notify student and request payment.', 'error');
     }
   };
+
+  const handlePostMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!typedMessage.trim() || !selectedOrder || !user) return;
+
+    setIsSendingMessage(true);
+    try {
+      const recipient = orderDetailTab === 'chat-expert' ? 'expert' : 'student';
+      const sent = await fallbackDb.postMessage({
+        order_id: selectedOrder.id,
+        sender_id: user.id,
+        sender_name: user.full_name,
+        content: typedMessage.trim(),
+        is_admin: true,
+        recipient,
+      });
+
+      if (sent) setMessages(prev => [...prev, sent]);
+      setTypedMessage('');
+    } catch (err) {
+      console.error('Failed to send message:', err);
+      if (showToast) showToast('Failed to deliver message.', 'error');
+    } finally {
+      setIsSendingMessage(false);
+    }
+  };
+
+  // Live poll: refresh messages every 5 seconds when chat tab is open
+  useEffect(() => {
+    if (!selectedOrder || (orderDetailTab !== 'chat' && orderDetailTab !== 'chat-expert')) return;
+    const interval = setInterval(() => {
+      fetchMessagesForOrder(selectedOrder.id);
+    }, POLLING_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [selectedOrder?.id, orderDetailTab]);
 
   const handleToggleMessageRead = async (messageId: string) => {
     try {
@@ -542,7 +576,8 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
             </p>
           </div>
 
-          <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0 gap-1">
+          <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0 gap-1 items-center">
+            {user && <NotificationBell userEmail={user.email} />}
             <button
               onClick={() => setActiveTab('orders')}
               className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs font-bold transition-all ${
@@ -584,47 +619,89 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
               <Coins className="h-3.5 w-3.5" />
               <span>Payments Ledger ({payments.length})</span>
             </button>
+            <button
+              onClick={() => setActiveTab('withdrawals')}
+              className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === 'withdrawals' ? 'bg-amber-500 text-[#0F172A]' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <ArrowDownToLine className="h-3.5 w-3.5" />
+              <span>Withdrawals ({withdrawals.filter(w => w.status === 'pending').length})</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('ratings')}
+              className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === 'ratings' ? 'bg-amber-500 text-[#0F172A]' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Star className="h-3.5 w-3.5" />
+              <span>Ratings ({ratings.length})</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('analytics')}
+              className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === 'analytics' ? 'bg-amber-500 text-[#0F172A]' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <BarChart3 className="h-3.5 w-3.5" />
+              <span>Analytics</span>
+            </button>
           </div>
         </div>
       </header>
 
       {/* 2. STATS OVERVIEW SECTION */}
       <section className="max-w-7xl xl:max-w-[90%] 2xl:max-w-[95%] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6">
-          <div className="bg-slate-900 border border-slate-800/80 p-4 sm:p-6 rounded-xl flex items-center space-x-4">
-            <div className="p-3 bg-slate-950 text-slate-400 rounded-lg border border-slate-800">
-              <Users className="h-5 w-5 sm:h-6 sm:w-6" />
-            </div>
-            <div>
-              <span className="block text-[10px] sm:text-xs text-slate-400 uppercase tracking-wider font-semibold">Pending Allocation</span>
-              <span className="text-lg sm:text-2xl font-black text-white">{unassignedCount}</span>
-            </div>
-          </div>
-          <div className="bg-slate-900 border border-slate-800/80 p-4 sm:p-6 rounded-xl flex items-center space-x-4">
-            <div className="p-3 bg-slate-950 text-amber-500 rounded-lg border border-slate-800">
-              <Clock className="h-5 w-5 sm:h-6 sm:w-6" />
-            </div>
-            <div>
-              <span className="block text-[10px] sm:text-xs text-slate-400 uppercase tracking-wider font-semibold">Active Writing</span>
-              <span className="text-lg sm:text-2xl font-black text-white">{activeAssignments}</span>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+          <div className="group relative bg-slate-900/60 backdrop-blur-sm border border-slate-800/80 p-4 sm:p-5 rounded-xl overflow-hidden hover:border-amber-500/30 transition-all duration-300 hover:shadow-lg hover:shadow-amber-500/5">
+            <div className="absolute inset-0 bg-gradient-to-br from-slate-800/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            <div className="relative flex items-center space-x-3">
+              <div className="p-2.5 bg-gradient-to-br from-slate-800 to-slate-900 text-slate-300 rounded-lg border border-slate-700/50 group-hover:border-amber-500/20 transition-colors">
+                <Users className="h-5 w-5" />
+              </div>
+              <div>
+                <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Pending Allocation</span>
+                <span className="text-xl sm:text-2xl font-black text-white">{unassignedCount}</span>
+              </div>
             </div>
           </div>
-          <div className="bg-slate-900 border border-slate-800/80 p-4 sm:p-6 rounded-xl flex items-center space-x-4">
-            <div className="p-3 bg-slate-950 text-emerald-500 rounded-lg border border-slate-800">
-              <ShieldCheck className="h-5 w-5 sm:h-6 sm:w-6" />
-            </div>
-            <div>
-              <span className="block text-[10px] sm:text-xs text-slate-400 uppercase tracking-wider font-semibold">Total Submissions</span>
-              <span className="text-lg sm:text-2xl font-black text-white">{totalSubmissions}</span>
+
+          <div className="group relative bg-slate-900/60 backdrop-blur-sm border border-slate-800/80 p-4 sm:p-5 rounded-xl overflow-hidden hover:border-amber-500/30 transition-all duration-300 hover:shadow-lg hover:shadow-amber-500/5">
+            <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            <div className="relative flex items-center space-x-3">
+              <div className="p-2.5 bg-gradient-to-br from-amber-500/10 to-amber-500/5 text-amber-400 rounded-lg border border-amber-500/20">
+                <Clock className="h-5 w-5" />
+              </div>
+              <div>
+                <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Active Writing</span>
+                <span className="text-xl sm:text-2xl font-black text-white">{activeAssignments}</span>
+              </div>
             </div>
           </div>
-          <div className="bg-slate-900 border border-slate-800/80 p-4 sm:p-6 rounded-xl flex items-center space-x-4">
-            <div className="p-3 bg-slate-950 text-blue-500 rounded-lg border border-slate-800">
-              <Mail className="h-5 w-5 sm:h-6 sm:w-6" />
+
+          <div className="group relative bg-slate-900/60 backdrop-blur-sm border border-slate-800/80 p-4 sm:p-5 rounded-xl overflow-hidden hover:border-emerald-500/30 transition-all duration-300 hover:shadow-lg hover:shadow-emerald-500/5">
+            <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            <div className="relative flex items-center space-x-3">
+              <div className="p-2.5 bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 text-emerald-400 rounded-lg border border-emerald-500/20">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+              <div>
+                <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Total Submissions</span>
+                <span className="text-xl sm:text-2xl font-black text-white">{totalSubmissions}</span>
+              </div>
             </div>
-            <div>
-              <span className="block text-[10px] sm:text-xs text-slate-400 uppercase tracking-wider font-semibold">General Inquiries</span>
-              <span className="text-lg sm:text-2xl font-black text-[#60A5FA]">{contactMessages.length}</span>
+          </div>
+
+          <div className="group relative bg-slate-900/60 backdrop-blur-sm border border-slate-800/80 p-4 sm:p-5 rounded-xl overflow-hidden hover:border-blue-500/30 transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/5">
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            <div className="relative flex items-center space-x-3">
+              <div className="p-2.5 bg-gradient-to-br from-blue-500/10 to-blue-500/5 text-blue-400 rounded-lg border border-blue-500/20">
+                <Mail className="h-5 w-5" />
+              </div>
+              <div>
+                <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold">General Inquiries</span>
+                <span className="text-xl sm:text-2xl font-black text-blue-400">{contactMessages.length}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -658,31 +735,57 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                   No academic projects submitted yet.
                 </div>
               ) : (
-                <div className="space-y-2.5 max-h-[70vh] overflow-y-auto pr-1">
-                  {orders.map((o) => (
-                    <div
-                      key={o.id}
-                      onClick={() => setSelectedOrder(o)}
-                      className={`bg-slate-900 hover:bg-slate-800 p-4 rounded-xl border transition-all cursor-pointer select-none space-y-2.5 ${
-                        selectedOrder?.id === o.id ? 'border-amber-500' : 'border-slate-800'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold font-mono text-amber-400">{o.id}</span>
-                        {getStatusBadge(o.status)}
-                      </div>
+                <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
+                  {orders.map((o) => {
+                    const isSelected = selectedOrder?.id === o.id;
+                    return (
+                      <div
+                        key={o.id}
+                        onClick={() => setSelectedOrder(o)}
+                        className={`group relative p-4 rounded-xl border transition-all duration-200 cursor-pointer select-none overflow-hidden ${
+                          isSelected
+                            ? 'bg-slate-800/80 border-amber-500/50 shadow-lg shadow-amber-500/5'
+                            : 'bg-slate-900/60 border-slate-800/60 hover:bg-slate-800/50 hover:border-slate-700/80'
+                        }`}
+                      >
+                        {isSelected && (
+                          <div className="absolute inset-0 bg-gradient-to-r from-amber-500/5 via-transparent to-transparent pointer-events-none" />
+                        )}
+                        <div className="relative space-y-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-[11px] font-bold font-mono text-amber-400 truncate">{o.id}</span>
+                              <span className="text-slate-600 text-[8px]">|</span>
+                              {getStatusBadge(o.status)}
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {o.payment_status === 'approved' && (
+                                <span className="text-[8px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full">PAID</span>
+                              )}
+                              {o.payment_status === 'pending' && o.payment_screenshot && (
+                                <span className="text-[8px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded-full animate-pulse">VERIFY</span>
+                              )}
+                              {o.special_instructions?.includes('Pay Upon Delivery') && !o.payment_screenshot && (
+                                <span className="text-[8px] font-bold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-1.5 py-0.5 rounded-full">LATER</span>
+                              )}
+                            </div>
+                          </div>
 
-                      <div className="space-y-0.5">
-                        <h4 className="text-xs sm:text-sm font-bold text-white line-clamp-1">{o.subject}</h4>
-                        <p className="text-[10px] text-slate-400 font-light">Client: {o.client_name} ({o.client_email})</p>
-                      </div>
+                          <div className="space-y-0.5">
+                            <h4 className="text-xs sm:text-[13px] font-bold text-white line-clamp-1">{o.subject}</h4>
+                            <p className="text-[10px] text-slate-400 font-light truncate">{o.client_name}</p>
+                          </div>
 
-                      <div className="flex justify-between items-center text-[10px] text-slate-400 border-t border-slate-800/60 pt-2 bg-transparent">
-                        <span className="font-light">Writer: {o.assigned_to || 'Unallocated'}</span>
-                        <span className="font-mono font-bold text-slate-200">{o.budget_range}</span>
+                          <div className="flex justify-between items-center text-[10px] border-t border-slate-800/40 pt-2">
+                            <span className={`font-light ${o.assigned_to ? 'text-emerald-400/80' : 'text-slate-500'}`}>
+                              {o.assigned_to ? `✍ ${o.assigned_to}` : '⊘ Unallocated'}
+                            </span>
+                            <span className="font-mono font-bold text-slate-300 bg-slate-800/60 px-2 py-0.5 rounded text-[9px]">{o.budget_range}</span>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -693,19 +796,94 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden flex flex-col h-[75vh]" id="coordinator-control-panel">
                   
                   {/* Panel Header */}
-                  <header className="bg-slate-950 p-4 border-b border-slate-800/80 flex justify-between items-center gap-4 shrink-0">
-                    <div className="space-y-0.5">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-xs font-mono font-bold text-amber-500">{selectedOrder.id}</span>
-                        <span className="text-slate-500 text-[10px]">|</span>
-                        <span className="text-xs text-slate-300 font-light truncate max-w-[200px]">{selectedOrder.client_email}</span>
+                  <header className="bg-slate-950/80 backdrop-blur-sm p-4 border-b border-slate-800/80 shrink-0">
+                    <div className="flex justify-between items-start gap-3">
+                      <div className="space-y-1.5 min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[11px] font-mono font-bold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded">{selectedOrder.id}</span>
+                          {getStatusBadge(selectedOrder.status)}
+                          {selectedOrder.payment_status && selectedOrder.payment_status !== 'approved' && (
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${
+                              selectedOrder.payment_status === 'pending'
+                                ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                : 'bg-red-500/10 text-red-400 border-red-500/20'
+                            }`}>
+                              {selectedOrder.payment_status === 'pending' ? 'Payment Pending' : 'Payment Rejected'}
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="text-sm font-bold text-white line-clamp-1">{selectedOrder.subject}</h3>
+                        <div className="flex items-center gap-3 text-[10px] text-slate-400">
+                          <span className="flex items-center gap-1">
+                            <span className="text-slate-500">Client:</span>
+                            <span className="text-slate-300 font-medium">{selectedOrder.client_name}</span>
+                          </span>
+                          <span className="text-slate-600">|</span>
+                          <span className="text-slate-400 font-mono">{selectedOrder.client_email}</span>
+                        </div>
                       </div>
-                      <h3 className="text-xs sm:text-sm font-bold text-white line-clamp-1">{selectedOrder.subject}</h3>
+                      <div className="text-right shrink-0 space-y-1">
+                        <div className="text-[10px] text-slate-500 uppercase tracking-wider">Budget</div>
+                        <div className="text-sm font-bold text-amber-400 font-mono">{selectedOrder.budget_range}</div>
+                      </div>
                     </div>
-                    {getStatusBadge(selectedOrder.status)}
                   </header>
 
+                  {/* Sub-tab bar for Overview / Chat */}
+                  <div className="flex border-b border-slate-800 bg-slate-950/30 px-4 shrink-0">
+                    <button
+                      onClick={() => setOrderDetailTab('overview')}
+                      className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-colors cursor-pointer ${
+                        orderDetailTab === 'overview'
+                          ? 'border-amber-500 text-amber-500'
+                          : 'border-transparent text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Overview & Actions
+                    </button>
+                    <button
+                      onClick={() => {
+                        setOrderDetailTab('chat');
+                        if (selectedOrder) fetchMessagesForOrder(selectedOrder.id);
+                      }}
+                      className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
+                        orderDetailTab === 'chat'
+                          ? 'border-amber-500 text-amber-500'
+                          : 'border-transparent text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <MessageSquare className="h-3.5 w-3.5" />
+                      <span>Chat with Student</span>
+                      {messages.filter(m => m.recipient === 'student').length > 0 && (
+                        <span className="bg-amber-500 text-slate-950 text-[9px] font-extrabold px-1.5 py-0.5 rounded-full">
+                          {messages.filter(m => m.recipient === 'student').length}
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setOrderDetailTab('chat-expert');
+                        if (selectedOrder) fetchMessagesForOrder(selectedOrder.id);
+                      }}
+                      className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
+                        orderDetailTab === 'chat-expert'
+                          ? 'border-amber-500 text-amber-500'
+                          : 'border-transparent text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                      <span>Chat with Expert</span>
+                      {messages.filter(m => m.recipient === 'expert').length > 0 && (
+                        <span className="bg-amber-500 text-slate-950 text-[9px] font-extrabold px-1.5 py-0.5 rounded-full">
+                          {messages.filter(m => m.recipient === 'expert').length}
+                        </span>
+                      )}
+                    </button>
+                  </div>
+
                   <div className="flex-1 overflow-y-auto p-4 space-y-5">
+                    {orderDetailTab === 'overview' ? (
+                    <>
                      {/* Payment Verification Block — only shows when student has submitted proof */}
                      {selectedOrder.payment_screenshot && (
                       <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-4">
@@ -790,28 +968,88 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                           <Sparkles className="h-4 w-4 text-amber-500" />
                           <h4 className="text-xs font-bold text-white uppercase tracking-wider">Expert Applications ({selectedOrder.applicants.length})</h4>
                         </div>
-                        <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                          {selectedOrder.applicants.map((applicant, idx) => (
-                            <div key={idx} className="bg-slate-900 border border-slate-800 p-2.5 rounded-lg text-xs space-y-1.5">
+                        <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                          {selectedOrder.applicants.map((applicant, idx) => {
+                            const isAccepted = selectedOrder.expert_accepted && selectedOrder.assigned_to === applicant.expert_name;
+                            return (
+                            <div
+                              key={idx}
+                              className={`p-3 rounded-lg text-xs space-y-2 transition-all duration-300 ${
+                                isAccepted
+                                  ? 'bg-emerald-950/40 border border-emerald-500/40 shadow-md shadow-emerald-500/[0.06]'
+                                  : 'bg-slate-900 border border-slate-800 hover:border-slate-700'
+                              }`}
+                            >
                               <div className="flex justify-between items-start gap-2">
-                                <div>
-                                  <strong className="text-white block">{applicant.expert_name}</strong>
-                                  <span className="text-[10px] text-slate-400 font-mono">{applicant.expert_email}</span>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <strong className={`block ${isAccepted ? 'text-emerald-300' : 'text-white'}`}>{applicant.expert_name}</strong>
+                                    {isAccepted && (
+                                      <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 rounded-full uppercase tracking-wide">
+                                        <CheckCircle className="h-2.5 w-2.5" />
+                                        Accepted
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="text-[10px] text-slate-400 font-mono block">{applicant.expert_email}</span>
+                                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                    <span className="text-[9px] text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded font-mono">
+                                      Applied: {new Date(applicant.applied_at).toLocaleDateString()}
+                                    </span>
+                                  </div>
                                 </div>
-                                <button
-                                  type="button"
-                                  onClick={() => handleAcceptExpertApplicant(applicant.expert_email, applicant.expert_name)}
-                                  className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold px-2.5 py-1.5 rounded text-[10px] transition-colors cursor-pointer shrink-0"
-                                >
-                                  Accept & Assign
-                                </button>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedApplicantProfile(applicant);
+                                      setShowApplicantModal(true);
+                                    }}
+                                    className="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-bold px-2.5 py-1.5 rounded text-[10px] transition-colors cursor-pointer border border-slate-700"
+                                  >
+                                    View Profile
+                                  </button>
+                                  {isAccepted ? (
+                                    <span className="bg-emerald-500/20 text-emerald-400 font-extrabold px-2.5 py-1.5 rounded text-[10px] border border-emerald-500/30 cursor-default">
+                                      Assigned
+                                    </span>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAcceptExpertApplicant(applicant.expert_email, applicant.expert_name)}
+                                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold px-2.5 py-1.5 rounded text-[10px] transition-colors cursor-pointer"
+                                    >
+                                      Accept & Assign
+                                    </button>
+                                  )}
+                                </div>
                               </div>
-                              <p className="text-[11px] text-slate-300 bg-slate-950 border border-slate-800 p-2 rounded leading-relaxed whitespace-pre-wrap font-light">
-                                "{applicant.proposal}"
-                              </p>
-                              <span className="text-[9px] text-slate-500 block font-light">Applied: {new Date(applicant.applied_at).toLocaleDateString()}</span>
+                              {applicant.proposal && (
+                                <p className="text-[11px] text-slate-300 bg-slate-950/60 border border-slate-800/60 p-2 rounded leading-relaxed whitespace-pre-wrap font-light italic">
+                                  {applicant.proposal}
+                                </p>
+                              )}
+                              {applicant.documents && applicant.documents.length > 0 && (
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <Paperclip className="h-3 w-3 text-slate-500" />
+                                  {applicant.documents.map((doc: any, docIdx: number) => (
+                                    <button
+                                      key={docIdx}
+                                      type="button"
+                                      onClick={() => {
+                                        if (doc.url) window.open(doc.url, '_blank');
+                                        else if (doc.data) downloadBase64File(doc.data, doc.name || `document_${docIdx}`);
+                                      }}
+                                      className="text-[9px] text-amber-400 hover:text-amber-300 font-mono underline cursor-pointer bg-transparent border-0 p-0"
+                                    >
+                                      {doc.name || `Document ${docIdx + 1}`}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -879,53 +1117,263 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                     )}
 
                     {/* RELEASE DELIVERABLE FILE */}
-                    <form onSubmit={handleReleaseDelivery} className="bg-emerald-500/5 border border-emerald-500/10 rounded-xl p-4">
-                      <div className="flex items-center justify-between gap-3 flex-wrap">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <h4 className="text-xs font-extrabold text-emerald-400 uppercase tracking-wider shrink-0">Release Solution</h4>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${selectedOrder.delivery_released ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/10 text-amber-400'}`}>
-                            {selectedOrder.delivery_released ? '✓ Released' : 'Not Released'}
+                    <div className={`rounded-xl p-4 transition-all ${
+                      selectedOrder.delivery_released
+                        ? 'bg-emerald-500/5 border border-emerald-500/15'
+                        : 'bg-slate-950/60 border border-slate-800/80'
+                    }`}>
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className={`h-2 w-2 rounded-full ${selectedOrder.delivery_released ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`} />
+                        <h4 className="text-xs font-extrabold text-white uppercase tracking-wider">Release Solution</h4>
+                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                          selectedOrder.delivery_released
+                            ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                            : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                        }`}>
+                          {selectedOrder.delivery_released ? 'Released' : 'Not Released'}
+                        </span>
+                      </div>
+                      <form onSubmit={handleReleaseDelivery} className="flex items-center gap-2">
+                        <input
+                          type="file"
+                          onChange={handleDeliveryFileUpload}
+                          className="hidden"
+                          id="delivery-file-upload-input"
+                        />
+                        <label
+                          htmlFor="delivery-file-upload-input"
+                          className="flex-1 min-w-0 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-lg py-2 px-3 text-slate-400 hover:text-white text-xs transition-colors cursor-pointer flex items-center justify-between gap-2"
+                        >
+                          <span className="truncate">{deliveryFileName || (deliveryFileContent ? 'File loaded' : 'Choose delivery file...')}</span>
+                          <Upload className="h-3.5 w-3.5 shrink-0" />
+                        </label>
+                        <button
+                          type="submit"
+                          disabled={isSubmittingDelivery || !deliveryFileContent}
+                          className="bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-500/30 disabled:text-emerald-500/50 disabled:cursor-not-allowed text-[#0F172A] font-bold py-2 px-4 rounded-lg text-xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0 shadow-sm shadow-emerald-500/10"
+                        >
+                          <Upload className="h-3.5 w-3.5" />
+                          <span>{isSubmittingDelivery ? 'Uploading...' : 'Release'}</span>
+                        </button>
+                      </form>
+                      {selectedOrder.delivery_name && (
+                        <div className="mt-2 flex items-center gap-1.5 text-[10px] text-slate-400">
+                          <span className="text-slate-500">Uploaded:</span>
+                          <span className="text-emerald-400/80 font-mono">{selectedOrder.delivery_name}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* DISPUTE RESOLUTION */}
+                    {selectedOrder.dispute_status && (
+                      <div className={`rounded-xl p-4 space-y-3 ${
+                        selectedOrder.dispute_status === 'resolved'
+                          ? 'bg-emerald-500/5 border border-emerald-500/20'
+                          : selectedOrder.dispute_status === 'open'
+                          ? 'bg-red-500/5 border border-red-500/20'
+                          : 'bg-amber-500/5 border border-amber-500/20'
+                      }`}>
+                        <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                          <h4 className={`text-xs font-bold uppercase tracking-wider ${
+                            selectedOrder.dispute_status === 'resolved' ? 'text-emerald-400' :
+                            selectedOrder.dispute_status === 'open' ? 'text-red-400' : 'text-amber-400'
+                          }`}>
+                            Dispute Resolution
+                          </h4>
+                          <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
+                            selectedOrder.dispute_status === 'resolved'
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                              : selectedOrder.dispute_status === 'open'
+                              ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                              : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                          }`}>
+                            {selectedOrder.dispute_status}
                           </span>
                         </div>
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <input
-                            type="file"
-                            onChange={handleDeliveryFileUpload}
-                            className="hidden"
-                            id="delivery-file-upload-input"
-                          />
-                          <label
-                            htmlFor="delivery-file-upload-input"
-                            className="flex-1 min-w-0 bg-slate-950 border border-slate-800 hover:border-emerald-500 rounded-lg py-1.5 px-3 text-slate-400 hover:text-white text-xs transition-colors cursor-pointer flex items-center justify-between gap-2"
-                          >
-                            <span className="truncate">{deliveryFileName || (deliveryFileContent ? 'File loaded' : 'Choose delivery file...')}</span>
-                            <Upload className="h-3.5 w-3.5 shrink-0" />
-                          </label>
-                          <button
-                            type="submit"
-                            disabled={isSubmittingDelivery || !deliveryFileContent}
-                            className="bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-500/30 disabled:cursor-not-allowed text-[#0F172A] font-bold py-1.5 px-3 rounded-lg text-xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
-                          >
-                            <Upload className="h-3.5 w-3.5" />
-                            <span>Release</span>
-                          </button>
+
+                        <div className="space-y-2">
+                          <div>
+                            <span className="block text-[10px] text-slate-500 uppercase font-mono">Student Complaint</span>
+                            <p className="text-xs text-slate-200 bg-slate-950 border border-slate-800 p-2 rounded mt-1">{selectedOrder.dispute_reason}</p>
+                          </div>
+                          {selectedOrder.dispute_created_at && (
+                            <span className="text-[10px] text-slate-500">
+                              Filed: {new Date(selectedOrder.dispute_created_at).toLocaleString()}
+                            </span>
+                          )}
                         </div>
+
+                        {selectedOrder.dispute_status !== 'resolved' && (
+                          <div className="space-y-2">
+                            <textarea
+                              id="dispute-resolution-text"
+                              rows={2}
+                              placeholder="Enter resolution notes for the student..."
+                              className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg py-2 px-3 text-white text-xs outline-none transition-colors resize-none"
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  const resolution = (document.getElementById('dispute-resolution-text') as HTMLTextAreaElement)?.value;
+                                  if (!resolution?.trim()) { if (showToast) showToast('Please enter resolution notes', 'error'); return; }
+                                  try {
+                                    const res = await fetch(`/api/orders/${selectedOrder.id}`, {
+                                      method: 'PUT',
+                                      headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
+                                      body: JSON.stringify({
+                                        dispute_status: 'resolved',
+                                        dispute_resolution: resolution.trim(),
+                                        dispute_resolved_at: new Date().toISOString(),
+                                      }),
+                                    });
+                                    if (res.ok) {
+                                      const updated = await res.json();
+                                      setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, ...updated } : o));
+                                      setSelectedOrder(prev => prev ? { ...prev, ...updated } : null);
+                                      if (showToast) showToast('Dispute resolved successfully', 'success');
+                                    }
+                                  } catch (e) {
+                                    if (showToast) showToast('Failed to resolve dispute', 'error');
+                                  }
+                                }}
+                                className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-[#0F172A] font-bold py-2 px-3 rounded-lg text-xs transition-colors cursor-pointer"
+                              >
+                                Mark Resolved
+                              </button>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  const resolution = (document.getElementById('dispute-resolution-text') as HTMLTextAreaElement)?.value;
+                                  try {
+                                    const res = await fetch(`/api/orders/${selectedOrder.id}`, {
+                                      method: 'PUT',
+                                      headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
+                                      body: JSON.stringify({
+                                        dispute_status: 'under_review',
+                                        dispute_resolution: resolution?.trim() || 'Under review by admin team',
+                                      }),
+                                    });
+                                    if (res.ok) {
+                                      const updated = await res.json();
+                                      setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, ...updated } : o));
+                                      setSelectedOrder(prev => prev ? { ...prev, ...updated } : null);
+                                      if (showToast) showToast('Dispute marked as under review', 'success');
+                                    }
+                                  } catch (e) {
+                                    if (showToast) showToast('Failed to update dispute', 'error');
+                                  }
+                                }}
+                                className="bg-amber-500 hover:bg-amber-400 text-[#0F172A] font-bold py-2 px-3 rounded-lg text-xs transition-colors cursor-pointer"
+                              >
+                                Under Review
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {selectedOrder.dispute_resolution && (
+                          <div>
+                            <span className="block text-[10px] text-slate-500 uppercase font-mono">Resolution Notes</span>
+                            <p className="text-xs text-slate-200 bg-slate-950 border border-slate-800 p-2 rounded mt-1">{selectedOrder.dispute_resolution}</p>
+                          </div>
+                        )}
                       </div>
-                    </form>
+                    )}
+                    </>
+                    ) : (
+                    /* Chat View — shows when 'chat' or 'chat-expert' sub-tab is active */
+                    <div className="flex flex-col h-full bg-slate-950 border border-slate-800 rounded-xl overflow-hidden">
+                      <div className="flex-grow overflow-y-auto p-4 space-y-3">
+                        {orderDetailTab === 'chat' ? (
+                          <div className="bg-slate-900/80 border border-slate-800 rounded-lg p-2 flex items-center gap-2 shrink-0">
+                            <div className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0" />
+                            <p className="text-[9px] text-slate-400 font-medium">Messages from <span className="text-amber-400 font-bold">Student</span> appear here. You can reply directly.</p>
+                          </div>
+                        ) : (
+                          <div className="bg-slate-900/80 border border-slate-800 rounded-lg p-2 flex items-center gap-2 shrink-0">
+                            <div className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0" />
+                            <p className="text-[9px] text-slate-400 font-medium">Direct chat with <span className="text-amber-400 font-bold">Expert</span> {selectedOrder?.assigned_to && `(${selectedOrder.assigned_to})`}. Coordinate task details here.</p>
+                          </div>
+                        )}
+                        {(() => {
+                          const filteredMessages = orderDetailTab === 'chat'
+                            ? messages.filter(m => m.recipient === 'student')
+                            : messages.filter(m => m.recipient === 'expert');
+                          return filteredMessages.length === 0 ? (
+                            <div className="text-center py-8 space-y-2">
+                              <MessageSquare className="h-8 w-8 text-slate-600 mx-auto" />
+                              <p className="text-xs text-slate-500">
+                                {orderDetailTab === 'chat' ? 'No student messages yet for this order.' : 'No expert messages yet for this order.'}
+                              </p>
+                              <p className="text-[10px] text-slate-600 leading-normal max-w-xs mx-auto font-light">
+                                {orderDetailTab === 'chat'
+                                  ? 'Messages from students assigned to this project will appear here.'
+                                  : 'Chat with the assigned expert to coordinate task details.'}
+                              </p>
+                            </div>
+                          ) : (
+                            filteredMessages.map((msg) => {
+                              const isMe = msg.sender_id === user?.id || msg.is_admin;
+                              return (
+                                <div
+                                  key={msg.id}
+                                  className={`flex flex-col max-w-[85%] ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'}`}
+                                >
+                                  <span className="text-[9px] text-slate-500 mb-0.5 px-1 font-semibold">
+                                    {msg.sender_name} &bull; {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                  <div
+                                    className={`p-3 rounded-xl text-xs leading-normal ${
+                                      isMe
+                                        ? 'bg-amber-500 text-[#0F172A] font-semibold rounded-tr-none shadow shadow-amber-500/10'
+                                        : 'bg-slate-900 text-slate-200 border border-slate-800 rounded-tl-none'
+                                    }`}
+                                  >
+                                    <p className="whitespace-pre-wrap font-light">{msg.content}</p>
+                                  </div>
+                                </div>
+                              );
+                            })
+                          );
+                        })()}
+                      </div>
 
-
+                      <form onSubmit={handlePostMessage} className="p-2 border-t border-slate-800 bg-slate-950 flex items-center space-x-2 shrink-0">
+                        <input
+                          type="text"
+                          value={typedMessage}
+                          onChange={(e) => setTypedMessage(e.target.value)}
+                          placeholder={orderDetailTab === 'chat' ? 'Message to student...' : 'Message to expert...'}
+                          className="flex-grow bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-lg py-2 px-3 text-xs text-slate-100 outline-none transition-colors"
+                        />
+                        <button
+                          type="submit"
+                          disabled={isSendingMessage || !typedMessage.trim()}
+                          className="bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-[#0F172A] p-2 rounded-lg transition-all shrink-0 cursor-pointer"
+                        >
+                          <Send className="h-3.5 w-3.5" />
+                        </button>
+                      </form>
+                    </div>
+                    )}
                   </div>
 
                 </div>
               ) : (
-                <div className="h-[55vh] flex flex-col items-center justify-center border border-dashed border-slate-800 rounded-2xl bg-slate-900/10 text-center p-6 space-y-3">
-                  <div className="p-4 bg-slate-950 text-slate-500 rounded-full border border-slate-800">
-                    <FileText className="h-10 w-10" />
+                <div className="h-[55vh] flex flex-col items-center justify-center border border-dashed border-slate-800/80 rounded-2xl bg-gradient-to-b from-slate-900/20 to-transparent text-center p-8 space-y-4">
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-amber-500/5 rounded-full blur-xl" />
+                    <div className="relative p-4 bg-slate-950 text-slate-600 rounded-full border border-slate-800/80">
+                      <FileText className="h-8 w-8" />
+                    </div>
                   </div>
-                  <h3 className="text-white font-bold text-base">Select assignment ledger</h3>
-                  <p className="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed">
-                    Choose any assignment ledger on the left grid to allocate expert writers, update statuses, upload final model answers, or answer client messages.
-                  </p>
+                  <div className="space-y-2">
+                    <h3 className="text-white font-bold text-sm">Select an Assignment</h3>
+                    <p className="text-xs text-slate-500 max-w-xs mx-auto leading-relaxed">
+                      Choose an assignment from the list to manage writer allocation, track status, upload deliverables, or respond to client messages.
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
@@ -1022,7 +1470,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                 {applications.map((app) => (
                   <div
                     key={app.id}
-                    className={`p-5 rounded-xl border flex flex-col md:flex-row items-start justify-between gap-4 transition-all ${
+                    className={`p-5 rounded-xl border flex flex-col md:flex-row items-start justify-between gap-4 transition-all overflow-hidden min-w-0 ${
                       app.status === 'approved' 
                         ? 'bg-emerald-500/5 border-emerald-500/20 opacity-80' 
                         : app.status === 'rejected' 
@@ -1046,25 +1494,59 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                         )}
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs bg-slate-950/40 p-3 rounded-lg border border-slate-800">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs bg-slate-950/40 p-3 rounded-lg border border-slate-800 min-w-0">
                         <div>
-                          <strong className="text-slate-400 uppercase text-[9px] tracking-wider block mb-0.5">Highest Qualification</strong>
-                          <span className="text-slate-100 font-semibold">{app.degree}</span>
+                          <strong className="text-slate-400 uppercase text-[9px] tracking-wider block mb-0.5">Institution</strong>
+                          <span className="text-slate-100 font-semibold">{app.institution || 'N/A'}</span>
                         </div>
                         <div>
-                          <strong className="text-slate-400 uppercase text-[9px] tracking-wider block mb-0.5">Current / graduation GPA</strong>
+                          <strong className="text-slate-400 uppercase text-[9px] tracking-wider block mb-0.5">Graduation Year</strong>
+                          <span className="text-slate-100 font-semibold">{app.graduation_year || 'N/A'}</span>
+                        </div>
+                        <div>
+                          <strong className="text-slate-400 uppercase text-[9px] tracking-wider block mb-0.5">Field of Study</strong>
+                          <span className="text-slate-100 font-semibold">{app.field_of_study || 'N/A'}</span>
+                        </div>
+                        <div>
+                          <strong className="text-slate-400 uppercase text-[9px] tracking-wider block mb-0.5">GPA</strong>
                           <span className="text-emerald-400 font-bold font-mono">{app.gpa || 'N/A'}</span>
                         </div>
                         <div>
-                          <strong className="text-slate-400 uppercase text-[9px] tracking-wider block mb-0.5">Academic Field of Expertise</strong>
-                          <span className="text-slate-100 font-semibold">{app.subject}</span>
+                          <strong className="text-slate-400 uppercase text-[9px] tracking-wider block mb-0.5">Qualification</strong>
+                          <span className="text-slate-100 font-semibold">{app.degree || 'N/A'}</span>
+                        </div>
+                        <div>
+                          <strong className="text-slate-400 uppercase text-[9px] tracking-wider block mb-0.5">Software / Tools</strong>
+                          <span className="text-slate-100 font-semibold">{app.software || 'N/A'}</span>
+                        </div>
+                        <div>
+                          <strong className="text-slate-400 uppercase text-[9px] tracking-wider block mb-0.5">Languages</strong>
+                          <span className="text-slate-100 font-semibold">{app.languages || 'N/A'}</span>
+                        </div>
+                        <div>
+                          <strong className="text-slate-400 uppercase text-[9px] tracking-wider block mb-0.5">Availability</strong>
+                          <span className="text-slate-100 font-semibold">{app.availability || 'N/A'}</span>
                         </div>
                       </div>
 
-                      <div className="space-y-1.5">
+                      {app.portfolio_url && (
+                        <div className="text-xs bg-slate-950/40 p-3 rounded-lg border border-slate-800">
+                          <strong className="text-slate-400 uppercase text-[9px] tracking-wider block mb-0.5">Portfolio URL</strong>
+                          <a href={app.portfolio_url} target="_blank" rel="noopener noreferrer" className="text-sky-400 hover:text-sky-300 underline font-mono text-[11px] break-all">{app.portfolio_url}</a>
+                        </div>
+                      )}
+
+                      <div className="space-y-1.5 min-w-0">
                         <h4 className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Candidate Experience & Biography</h4>
-                        <p className="text-xs text-slate-200 leading-relaxed font-light bg-slate-950 p-3 rounded-lg border border-slate-800 whitespace-pre-wrap">{app.experience}</p>
+                        <p className="text-xs text-slate-200 leading-relaxed font-light bg-slate-950 p-3 rounded-lg border border-slate-800 whitespace-pre-wrap break-words overflow-hidden">{app.experience}</p>
                       </div>
+
+                      {app.referral && (
+                        <div className="text-xs bg-slate-950/40 p-3 rounded-lg border border-slate-800">
+                          <strong className="text-slate-400 uppercase text-[9px] tracking-wider block mb-0.5">How They Found Us</strong>
+                          <span className="text-slate-100 font-semibold">{app.referral}</span>
+                        </div>
+                      )}
 
                       {app.documents && app.documents.length > 0 && (
                         <div className="space-y-2">
@@ -1291,7 +1773,454 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
           </div>
         )}
 
+        {/* WITHDRAWALS TAB */}
+        {activeTab === 'withdrawals' && (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-800 pb-4 gap-4">
+              <div className="space-y-1">
+                <h2 className="text-base sm:text-lg font-bold text-white tracking-wide uppercase font-mono flex items-center gap-2">
+                  <ArrowDownToLine className="h-5 w-5 text-sky-500" />
+                  <span>Expert Withdrawals</span>
+                </h2>
+                <p className="text-xs text-slate-400 font-light">Review and process expert payout requests.</p>
+              </div>
+              <button onClick={fetchAdminData} className="p-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer">
+                <RefreshCw className="h-4 w-4" />
+              </button>
+            </div>
+
+            {withdrawals.length === 0 ? (
+              <div className="text-center py-16 bg-slate-950/20 border border-slate-800 rounded-xl text-slate-500 text-xs font-light space-y-3">
+                <ArrowDownToLine className="h-10 w-10 mx-auto text-slate-700" />
+                <p>No withdrawal requests yet.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto border border-slate-800 rounded-xl">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-950 text-slate-400 border-b border-slate-800 font-mono font-bold uppercase tracking-wider">
+                      <th className="p-3">Expert</th>
+                      <th className="p-3">Amount</th>
+                      <th className="p-3">Method</th>
+                      <th className="p-3">Account</th>
+                      <th className="p-3">Status</th>
+                      <th className="p-3">Date</th>
+                      <th className="p-3">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 bg-slate-950/20">
+                    {withdrawals.map(w => (
+                      <tr key={w.id} className="hover:bg-slate-900/40 transition-colors">
+                        <td className="p-3">
+                          <p className="font-bold text-white">{w.expert_name}</p>
+                          <p className="text-[10px] text-slate-500">{w.expert_email}</p>
+                        </td>
+                        <td className="p-3 font-bold text-white">
+                          {w.currency === 'ETB'
+                            ? `${(w.amount * ETB_RATE).toLocaleString(undefined, { maximumFractionDigits: 0 })} ETB`
+                            : `$${w.amount.toFixed(2)} USD`}
+                        </td>
+                        <td className="p-3 uppercase font-mono text-slate-400">{w.method}</td>
+                        <td className="p-3 text-slate-400 text-[10px] max-w-[150px] truncate">{w.account_details}</td>
+                        <td className="p-3">
+                          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                            w.status === 'approved' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                              : w.status === 'pending' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                              : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                          }`}>
+                            {w.status}
+                          </span>
+                        </td>
+                        <td className="p-3 text-slate-400 font-mono text-[10px]">{new Date(w.created_at).toLocaleDateString()}</td>
+                        <td className="p-3">
+                          {w.status === 'pending' && withdrawalApprovingId !== w.id && (
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => {
+                                  setWithdrawalApprovingId(w.id);
+                                  setWithdrawalScreenshotFile(null);
+                                }}
+                                className="p-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded transition-colors cursor-pointer"
+                                title="Approve"
+                              >
+                                <Check className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleWithdrawalAction(w.id, 'rejected')}
+                                className="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded transition-colors cursor-pointer"
+                                title="Reject"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          )}
+                          {w.status === 'pending' && withdrawalApprovingId === w.id && (
+                            <div className="space-y-2 min-w-[200px]">
+                              <label className="block text-[9px] font-bold text-slate-400 uppercase">Payment Proof Screenshot</label>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => setWithdrawalScreenshotFile(e.target.files?.[0] || null)}
+                                className="block w-full text-[10px] text-slate-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:font-bold file:bg-emerald-500/10 file:text-emerald-400 hover:file:bg-emerald-500/20 file:cursor-pointer"
+                              />
+                              <div className="flex gap-1">
+                                <button
+                                  disabled={isApprovingWithdrawal}
+                                  onClick={async () => {
+                                    setIsApprovingWithdrawal(true);
+                                    try {
+                                      let screenshotUrl: string | undefined;
+                                      if (withdrawalScreenshotFile) {
+                                        const base64 = await new Promise<string>((resolve) => {
+                                          const reader = new FileReader();
+                                          reader.onloadend = () => resolve(reader.result as string);
+                                          reader.readAsDataURL(withdrawalScreenshotFile);
+                                        });
+                                        const url = await fallbackDb.uploadFile(base64, withdrawalScreenshotFile.name);
+                                        if (url) screenshotUrl = url;
+                                      }
+                                      await handleWithdrawalAction(w.id, 'approved', undefined, screenshotUrl);
+                                    } catch (e) {
+                                      if (showToast) showToast('Failed to upload screenshot.', 'error');
+                                    } finally {
+                                      setIsApprovingWithdrawal(false);
+                                    }
+                                  }}
+                                  className="p-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded transition-colors cursor-pointer disabled:opacity-50"
+                                  title="Approve with screenshot"
+                                >
+                                  {isApprovingWithdrawal ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setWithdrawalApprovingId(null);
+                                    setWithdrawalScreenshotFile(null);
+                                  }}
+                                  className="p-1.5 bg-slate-700/50 hover:bg-slate-700 text-slate-400 rounded transition-colors cursor-pointer"
+                                  title="Cancel"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                          {w.status !== 'pending' && w.admin_screenshot && (
+                            <button
+                              onClick={() => window.open(w.admin_screenshot, '_blank')}
+                              className="text-[10px] text-sky-400 hover:text-sky-300 font-bold flex items-center gap-1 cursor-pointer"
+                            >
+                              <Download className="h-3 w-3" />
+                              View Proof
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* RATINGS TAB */}
+        {activeTab === 'ratings' && (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-800 pb-4 gap-4">
+              <div className="space-y-1">
+                <h2 className="text-base sm:text-lg font-bold text-white tracking-wide uppercase font-mono flex items-center gap-2">
+                  <Star className="h-5 w-5 text-amber-500" />
+                  <span>Expert Ratings</span>
+                </h2>
+                <p className="text-xs text-slate-400 font-light">Client reviews and expert performance ratings.</p>
+              </div>
+            </div>
+
+            {ratings.length === 0 ? (
+              <div className="text-center py-16 bg-slate-950/20 border border-slate-800 rounded-xl text-slate-500 text-xs font-light space-y-3">
+                <Star className="h-10 w-10 mx-auto text-slate-700" />
+                <p>No ratings submitted yet.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto border border-slate-800 rounded-xl">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-950 text-slate-400 border-b border-slate-800 font-mono font-bold uppercase tracking-wider">
+                      <th className="p-3">Client</th>
+                      <th className="p-3">Expert</th>
+                      <th className="p-3">Order</th>
+                      <th className="p-3">Score</th>
+                      <th className="p-3">Comment</th>
+                      <th className="p-3">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 bg-slate-950/20">
+                    {ratings.map(r => (
+                      <tr key={r.id} className="hover:bg-slate-900/40 transition-colors">
+                        <td className="p-3 font-bold text-white">{r.client_name}</td>
+                        <td className="p-3 text-slate-400">{r.expert_email}</td>
+                        <td className="p-3 font-mono text-amber-500">{r.order_id}</td>
+                        <td className="p-3">
+                          <div className="flex items-center gap-0.5">
+                            {[1, 2, 3, 4, 5].map(s => (
+                              <Star key={s} className={`h-3 w-3 ${s <= r.score ? 'text-amber-400 fill-amber-400' : 'text-slate-700'}`} />
+                            ))}
+                          </div>
+                        </td>
+                        <td className="p-3 text-slate-400 text-[10px] max-w-[200px] truncate">{r.comment || '—'}</td>
+                        <td className="p-3 text-slate-400 font-mono text-[10px]">{new Date(r.created_at).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ANALYTICS TAB */}
+        {activeTab === 'analytics' && (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 space-y-6">
+            <div className="border-b border-slate-800 pb-4">
+              <h2 className="text-base sm:text-lg font-bold text-white tracking-wide uppercase font-mono flex items-center gap-2">
+                <BarChart3 className="h-5 w-5 text-sky-500" />
+                <span>Revenue Analytics</span>
+              </h2>
+            </div>
+
+            {analytics ? (
+              <>
+                {/* Revenue Stats */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-1">
+                    <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Total Revenue</p>
+                    <p className="text-lg font-black text-white">${analytics.revenue.totalRevenue.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-1">
+                    <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Admin Cut (10%)</p>
+                    <p className="text-lg font-black text-amber-400">${analytics.revenue.totalAdminCut.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-1">
+                    <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Expert Payouts</p>
+                    <p className="text-lg font-black text-emerald-400">${analytics.revenue.totalExpertPayout.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-1">
+                    <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Withdrawn</p>
+                    <p className="text-lg font-black text-sky-400">${analytics.revenue.totalWithdrawn.toLocaleString()}</p>
+                  </div>
+                </div>
+
+                {/* Order Stats */}
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                  {[
+                    { label: 'Total Orders', value: analytics.orders.totalOrders, color: 'text-white' },
+                    { label: 'Completed', value: analytics.orders.completedOrders, color: 'text-emerald-400' },
+                    { label: 'In Progress', value: analytics.orders.inProgressOrders, color: 'text-sky-400' },
+                    { label: 'Pending', value: analytics.orders.pendingOrders, color: 'text-amber-400' },
+                    { label: 'Under Review', value: analytics.orders.underReviewOrders, color: 'text-purple-400' },
+                  ].map(s => (
+                    <div key={s.label} className="bg-slate-950 border border-slate-800 p-3 rounded-xl text-center">
+                      <p className={`text-xl font-black ${s.color}`}>{s.value}</p>
+                      <p className="text-[9px] text-slate-500 uppercase font-bold">{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* User & Rating Stats */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl">
+                    <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-2">User Base</p>
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-xs"><span className="text-slate-400">Clients</span><span className="font-bold text-white">{analytics.users.totalClients}</span></div>
+                      <div className="flex justify-between text-xs"><span className="text-slate-400">Experts</span><span className="font-bold text-white">{analytics.users.totalExperts}</span></div>
+                      <div className="flex justify-between text-xs"><span className="text-slate-400">Pending Approval</span><span className="font-bold text-amber-400">{analytics.users.pendingExperts}</span></div>
+                    </div>
+                  </div>
+                  <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl">
+                    <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-2">Ratings</p>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-3xl font-black text-amber-400">{analytics.ratings.avgRating}</span>
+                      <div className="flex gap-0.5">
+                        {[1, 2, 3, 4, 5].map(s => (
+                          <Star key={s} className={`h-4 w-4 ${s <= Math.round(Number(analytics.ratings.avgRating)) ? 'text-amber-400 fill-amber-400' : 'text-slate-700'}`} />
+                        ))}
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-slate-500">{analytics.ratings.totalRatings} total reviews</p>
+                  </div>
+                  <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl">
+                    <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-2">Expert Performance</p>
+                    <div className="space-y-2">
+                      {analytics.topExperts.length === 0 ? (
+                        <p className="text-[10px] text-slate-500">No data yet</p>
+                      ) : analytics.topExperts.map((e: any, i: number) => (
+                        <div key={i} className="bg-slate-900 border border-slate-800 p-2.5 rounded-lg">
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-[10px] text-white font-bold truncate">{e.name}</span>
+                            <span className="text-[10px] font-bold text-emerald-400">${e.earnings.toLocaleString()}</span>
+                          </div>
+                          <div className="flex items-center gap-3 text-[9px] text-slate-500">
+                            <span>{e.completedOrders}/{e.totalOrders} completed</span>
+                            {e.avgRating !== 'N/A' && (
+                              <span className="flex items-center gap-0.5">
+                                <Star className="h-2.5 w-2.5 text-amber-400 fill-amber-400" />
+                                {e.avgRating}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Revenue by Month */}
+                <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl">
+                  <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-4">Revenue Trend (6 months)</p>
+                  <div className="flex items-end gap-2 h-32">
+                    {analytics.revenueByMonth.map((m: any, i: number) => {
+                      const maxRevenue = Math.max(...analytics.revenueByMonth.map((x: any) => x.revenue), 1);
+                      const height = (m.revenue / maxRevenue) * 100;
+                      return (
+                        <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                          <span className="text-[8px] text-slate-500 font-mono">${m.revenue.toLocaleString()}</span>
+                          <div className="w-full flex gap-0.5 items-end" style={{ height: '80px' }}>
+                            <div className="flex-1 bg-amber-500/80 rounded-t" style={{ height: `${Math.max(height, 2)}%` }} />
+                            <div className="flex-1 bg-emerald-500/60 rounded-t" style={{ height: `${Math.max((m.admin_cut / maxRevenue) * 100, 2)}%` }} />
+                          </div>
+                          <span className="text-[9px] text-slate-500 font-mono">{m.month}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex gap-4 mt-2 justify-center">
+                    <span className="flex items-center gap-1 text-[9px] text-slate-400"><span className="h-2 w-2 bg-amber-500/80 rounded" /> Revenue</span>
+                    <span className="flex items-center gap-1 text-[9px] text-slate-400"><span className="h-2 w-2 bg-emerald-500/60 rounded" /> Admin Cut</span>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-16 text-slate-500 text-xs">Loading analytics...</div>
+            )}
+          </div>
+        )}
+
       </main>
+
+      {/* Applicant Profile Modal */}
+      {showApplicantModal && selectedApplicantProfile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setShowApplicantModal(false)}>
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                {selectedOrder?.expert_accepted && selectedOrder?.assigned_to === selectedApplicantProfile.expert_name ? (
+                  <>
+                    <CheckCircle className="h-4 w-4 text-emerald-400" />
+                    <h3 className="text-sm font-bold text-emerald-300">Accepted Expert</h3>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4 text-amber-500" />
+                    <h3 className="text-sm font-bold text-white">Applicant Profile</h3>
+                  </>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowApplicantModal(false)}
+                className="text-slate-400 hover:text-white p-1 cursor-pointer bg-transparent border-0"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="space-y-1">
+                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Full Name</h4>
+                <p className="text-sm text-white font-semibold">{selectedApplicantProfile.expert_name}</p>
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Email</h4>
+                <p className="text-xs text-slate-300 font-mono">{selectedApplicantProfile.expert_email}</p>
+              </div>
+              {selectedApplicantProfile.qualification && (
+                <div className="space-y-1">
+                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Qualification</h4>
+                  <p className="text-xs text-slate-300">{selectedApplicantProfile.qualification}</p>
+                </div>
+              )}
+              {selectedApplicantProfile.experience && (
+                <div className="space-y-1">
+                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Experience / Background</h4>
+                  <p className="text-xs text-slate-300 bg-slate-950 border border-slate-800 p-2 rounded leading-relaxed whitespace-pre-wrap">{selectedApplicantProfile.experience}</p>
+                </div>
+              )}
+              {selectedApplicantProfile.subjects && selectedApplicantProfile.subjects.length > 0 && (
+                <div className="space-y-1">
+                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Subjects</h4>
+                  <div className="flex flex-wrap gap-1">
+                    {selectedApplicantProfile.subjects.map((s: string, i: number) => (
+                      <span key={i} className="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[9px] px-2 py-0.5 rounded-full font-bold">{s}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="space-y-1">
+                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Proposal</h4>
+                <p className="text-xs text-slate-300 bg-slate-950 border border-slate-800 p-2 rounded leading-relaxed whitespace-pre-wrap font-light italic">{selectedApplicantProfile.proposal}</p>
+              </div>
+              {selectedApplicantProfile.documents && selectedApplicantProfile.documents.length > 0 && (
+                <div className="space-y-1">
+                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Documents</h4>
+                  <div className="space-y-1">
+                    {selectedApplicantProfile.documents.map((doc: any, docIdx: number) => (
+                      <div key={docIdx} className="flex items-center gap-2 bg-slate-950 border border-slate-800 p-2 rounded">
+                        <Paperclip className="h-3 w-3 text-amber-400 shrink-0" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (doc.url) window.open(doc.url, '_blank');
+                            else if (doc.data) downloadBase64File(doc.data, doc.name || `document_${docIdx}`);
+                          }}
+                          className="text-[10px] text-amber-400 hover:text-amber-300 font-mono underline cursor-pointer bg-transparent border-0 p-0 flex-1 text-left"
+                        >
+                          {doc.name || `Document ${docIdx + 1}`}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="flex gap-2 pt-2 border-t border-slate-800">
+                {selectedOrder?.expert_accepted && selectedOrder?.assigned_to === selectedApplicantProfile.expert_name ? (
+                  <span className="flex-1 bg-emerald-500/20 text-emerald-400 font-extrabold py-2 px-3 rounded-lg text-xs flex items-center justify-center gap-1.5 border border-emerald-500/30 cursor-default">
+                    <CheckCircle className="h-4 w-4" />
+                    <span>Already Assigned</span>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleAcceptExpertApplicant(selectedApplicantProfile.expert_email, selectedApplicantProfile.expert_name);
+                      setShowApplicantModal(false);
+                    }}
+                    className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold py-2 px-3 rounded-lg text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Check className="h-4 w-4" />
+                    <span>Accept & Assign</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowApplicantModal(false)}
+                  className="bg-transparent border border-slate-700/50 text-slate-400 hover:bg-slate-800/50 font-bold py-2 px-3 rounded-lg text-xs transition-colors cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

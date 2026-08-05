@@ -6,12 +6,20 @@ import {
 } from 'lucide-react';
 import { PageType, Profile, Order as AcademicOrder } from '../types';
 import { fallbackDb } from '../lib/supabase';
+import {
+  MAX_FILE_SIZE_BYTES, COMPRESS_MAX_WIDTH, COMPRESS_MAX_HEIGHT, COMPRESS_QUALITY,
+  DOWNPAYMENT_THRESHOLD_USD, MIN_ORDER_USD, HOURS_DIVISOR, DEFAULT_EXCHANGE_RATES,
+} from '../lib/constants';
 
 export function getBasePrice(category: string, countryName: string) {
   if (category === 'Simple Assignment') return 5;
   if (category === '2D Drafting (Multiview and Pictorial Drawing including TitleBlock)') return 2;
-  if (countryName && countryName.toLowerCase() === 'ethiopia') return 7;
-  return 20;
+  const env = import.meta.env;
+  if (countryName && countryName.toLowerCase() === 'ethiopia') {
+    const etbBase = Number(env.VITE_BASE_PRICE_ETB) || 500;
+    return etbBase / (DEFAULT_EXCHANGE_RATES.ETB?.rate || 120);
+  }
+  return Number(env.VITE_BASE_PRICE_USD) || 15;
 }
 
 interface OrderProps {
@@ -24,7 +32,7 @@ interface OrderProps {
   setRedirectPage?: (page: PageType | null) => void;
 }
 
-const compressImage = (file: File, maxWidth = 800, maxHeight = 800, quality = 0.7): Promise<string> => {
+const compressImage = (file: File, maxWidth = COMPRESS_MAX_WIDTH, maxHeight = COMPRESS_MAX_HEIGHT, quality = COMPRESS_QUALITY): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -88,7 +96,13 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
   const [budget, setBudget] = useState('');
   const [expertPreference, setExpertPreference] = useState('auto');
   const [previousExpertName, setPreviousExpertName] = useState('');
-  const [liveRates, setLiveRates] = useState<Record<string, number>>({ ETB: 120, GBP: 0.79, CAD: 1.36, EUR: 0.92, SAR: 3.75 });
+  const [liveRates, setLiveRates] = useState<Record<string, number>>(() => {
+    const rates: Record<string, number> = {};
+    for (const [code, cfg] of Object.entries(DEFAULT_EXCHANGE_RATES)) {
+      rates[code] = cfg.rate;
+    }
+    return rates;
+  });
 
   const [paymentChoice, setPaymentChoice] = useState<'now' | 'delivery' | null>(null);
   const [ethiopiaMethod, setEthiopiaMethod] = useState<'cbe' | 'telebirr' | 'boa' | 'crypto' | 'card'>('cbe');
@@ -117,7 +131,7 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
           const data = await res.json();
           if (isMounted && data?.rates) {
             setLiveRates({
-              ETB: data.rates.ETB ? parseFloat(data.rates.ETB.toFixed(2)) : 120,
+              ETB: data.rates.ETB ? parseFloat(data.rates.ETB.toFixed(2)) : DEFAULT_EXCHANGE_RATES.ETB?.rate || 120,
               GBP: data.rates.GBP ? parseFloat(data.rates.GBP.toFixed(4)) : 0.79,
               CAD: data.rates.CAD ? parseFloat(data.rates.CAD.toFixed(4)) : 1.36,
               EUR: data.rates.EUR ? parseFloat(data.rates.EUR.toFixed(4)) : 0.92,
@@ -155,7 +169,7 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
 
   const curr = getCurrencyDetails();
   const budgetInUSD = (Number(budget) || 0) / curr.exchangeRate;
-  const needsDownpayment = budgetInUSD >= 100;
+  const needsDownpayment = budgetInUSD >= DOWNPAYMENT_THRESHOLD_USD;
 
   useEffect(() => {
     if (budgetManuallyEditedRef.current) return;
@@ -183,7 +197,7 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
     const matchedExpert = getMatchedExpert();
     return {
       id: orderId,
-      client_id: user?.id || 'anonymous-' + Math.random().toString(36).substring(2, 6),
+      client_id: user?.id || 'anonymous-' + crypto.randomUUID().replace(/-/g, '').substring(0, 8),
       client_name: user?.full_name || 'Guest Client',
       client_email: user?.email || '',
       service_type: serviceType,
@@ -204,7 +218,7 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
     if (!paymentChoice) { if (showToast) showToast('Please select a payment option.', 'error'); return; }
     setIsSubmitting(true);
     try {
-      const orderId = 'ord-' + Math.random().toString(36).substring(2, 7);
+      const orderId = 'ord-' + crypto.randomUUID().replace(/-/g, '').substring(0, 12);
       let filePublicUrl: string | undefined;
       if (selectedFile) {
         if (showToast) showToast('Uploading assignment file...', 'success');
@@ -277,12 +291,12 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
     if (step === 2) {
       if (!deadline || deadline.trim() === '') return false;
       const deadlineMs = new Date(deadline).getTime();
-      if (isNaN(deadlineMs) || deadlineMs <= Date.now() + 3600000) return false;
+      if (isNaN(deadlineMs) || deadlineMs <= Date.now() + HOURS_DIVISOR) return false;
       return true;
     }
     if (step === 3) {
       const budgetVal = Number(budget);
-      const minUSD = 3;
+      const minUSD = MIN_ORDER_USD;
       const minLocal = Math.ceil(minUSD * curr.exchangeRate);
       const baseLocal = Math.ceil(getBasePrice(serviceType, country) * curr.exchangeRate);
       return budgetVal >= minLocal && budgetVal >= baseLocal;
@@ -305,14 +319,14 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
     e.preventDefault(); setIsDragging(false);
     if (e.dataTransfer.files?.[0]) {
       const file = e.dataTransfer.files[0];
-      if (file.size > 40 * 1024 * 1024) { if (showToast) showToast('File too large. Max 40MB.', 'error'); return; }
+      if (file.size > MAX_FILE_SIZE_BYTES) { if (showToast) showToast('File too large. Max 40MB.', 'error'); return; }
       setFileName(file.name); setSelectedFile(file);
     }
   };
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files?.[0]) {
       const file = e.target.files[0];
-      if (file.size > 40 * 1024 * 1024) { if (showToast) showToast('File too large. Max 40MB.', 'error'); return; }
+      if (file.size > MAX_FILE_SIZE_BYTES) { if (showToast) showToast('File too large. Max 40MB.', 'error'); return; }
       setFileName(file.name); setSelectedFile(file);
     }
   };

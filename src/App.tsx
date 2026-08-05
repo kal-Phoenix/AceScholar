@@ -19,7 +19,25 @@ import ResetPassword from './components/ResetPassword';
 import Footer from './components/Footer';
 import WhatsAppButton from './components/WhatsAppButton';
 import ErrorBoundary from './components/ErrorBoundary';
-import { ShieldCheck, X } from 'lucide-react';
+import { CheckCircle2, AlertCircle, X } from 'lucide-react';
+import { DEFAULT_EXCHANGE_RATES, DEFAULT_FALLBACK_CITY, DEFAULT_FALLBACK_COUNTRY, DEFAULT_FALLBACK_CURRENCY, LOCAL_STORAGE_USER_KEY } from './lib/constants';
+
+// Parse exchange rates from env var (JSON string → lookup map), falling back to defaults
+const EXCHANGE_RATES: Record<string, { symbol: string; rate: number }> = (() => {
+  try {
+    const raw = import.meta.env.VITE_EXCHANGE_RATES;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return { ...DEFAULT_EXCHANGE_RATES, ...parsed };
+    }
+  } catch { /* ignore */ }
+  return { ...DEFAULT_EXCHANGE_RATES };
+})();
+
+function getCurrencyConfig(currencyCode: string): { symbol: string; rate: number } {
+  if (EXCHANGE_RATES[currencyCode]) return EXCHANGE_RATES[currencyCode];
+  return { symbol: '$', rate: 1.0 }; // USD fallback
+}
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<PageType>('home');
@@ -30,20 +48,21 @@ export default function App() {
   const [user, setUser] = useState<Profile | null>(() => {
     if (typeof window === 'undefined') return null;
     try {
-      const stored = localStorage.getItem('ace_scholar_current_user');
+      const stored = localStorage.getItem(LOCAL_STORAGE_USER_KEY);
       return stored ? JSON.parse(stored) : null;
     } catch {
-      localStorage.removeItem('ace_scholar_current_user');
+      localStorage.removeItem(LOCAL_STORAGE_USER_KEY);
       return null;
     }
   });
 
-  // Restore Supabase client session from localStorage on page load for token refresh
+  // Restore Supabase client session from Supabase's internal storage on page load
   useEffect(() => {
-    if (supabase && user?.access_token && user?.refresh_token) {
-      supabase.auth.setSession({
-        access_token: user.access_token,
-        refresh_token: user.refresh_token,
+    if (supabase) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) {
+          // Session is managed by Supabase internally — no need to restore from localStorage
+        }
       }).catch(() => {});
     }
   }, []);
@@ -61,12 +80,12 @@ export default function App() {
     city?: string;
     loading: boolean;
   }>({
-    country: 'Ethiopia',
-    currency: 'ETB',
+    country: DEFAULT_FALLBACK_COUNTRY,
+    currency: DEFAULT_FALLBACK_CURRENCY,
     symbol: 'Br',
-    exchangeRate: 120,
-    ip: '197.156.112.44',
-    city: 'Addis Ababa',
+    exchangeRate: EXCHANGE_RATES[DEFAULT_FALLBACK_CURRENCY]?.rate || 120,
+    ip: '',
+    city: DEFAULT_FALLBACK_CITY,
     loading: true,
   });
 
@@ -81,38 +100,15 @@ export default function App() {
           const countryName = data.country_name;
           const currCode = data.currency || (countryName === 'Ethiopia' ? 'ETB' : 'USD');
           
-          let symbol = '$';
-          let rate = 1.0;
-          if (currCode === 'ETB' || countryName.toLowerCase() === 'ethiopia') {
-            symbol = 'Br';
-            rate = 120;
-          } else if (currCode === 'GBP') {
-            symbol = '£';
-            rate = 0.79;
-          } else if (currCode === 'EUR') {
-            symbol = '€';
-            rate = 0.92;
-          } else if (currCode === 'CAD') {
-            symbol = 'C$';
-            rate = 1.36;
-          } else if (currCode === 'AUD') {
-            symbol = 'A$';
-            rate = 1.51;
-          } else if (currCode === 'AED') {
-            symbol = 'AED ';
-            rate = 3.67;
-          } else if (currCode === 'SAR') {
-            symbol = 'SR ';
-            rate = 3.75;
-          }
+          const { symbol, rate } = getCurrencyConfig(currCode);
 
           setDetectedLocation({
             country: countryName,
             currency: currCode,
             symbol,
             exchangeRate: rate,
-            ip: data.ip || '197.156.112.44',
-            city: data.city || 'Addis Ababa',
+            ip: data.ip || '',
+            city: data.city || DEFAULT_FALLBACK_CITY,
             loading: false,
           });
           return;
@@ -129,38 +125,23 @@ export default function App() {
         if (isMounted && data && data.countryName) {
           const countryName = data.countryName;
           let currCode = 'USD';
-          let symbol = '$';
-          let rate = 1.0;
+          const countryLower = countryName.toLowerCase();
 
-          if (countryName.toLowerCase() === 'ethiopia') {
-            currCode = 'ETB';
-            symbol = 'Br';
-            rate = 120;
-          } else if (countryName.toLowerCase() === 'united kingdom') {
-            currCode = 'GBP';
-            symbol = '£';
-            rate = 0.79;
-          } else if (countryName.toLowerCase() === 'germany' || countryName.toLowerCase() === 'france' || countryName.toLowerCase() === 'italy') {
-            currCode = 'EUR';
-            symbol = '€';
-            rate = 0.92;
-          } else if (countryName.toLowerCase() === 'canada') {
-            currCode = 'CAD';
-            symbol = 'C$';
-            rate = 1.36;
-          } else if (countryName.toLowerCase() === 'saudi arabia') {
-            currCode = 'SAR';
-            symbol = 'SR ';
-            rate = 3.75;
-          }
+          if (countryLower === 'ethiopia') currCode = 'ETB';
+          else if (countryLower === 'united kingdom') currCode = 'GBP';
+          else if (countryLower === 'germany' || countryLower === 'france' || countryLower === 'italy') currCode = 'EUR';
+          else if (countryLower === 'canada') currCode = 'CAD';
+          else if (countryLower === 'saudi arabia') currCode = 'SAR';
+
+          const { symbol, rate } = getCurrencyConfig(currCode);
 
           setDetectedLocation({
             country: countryName,
             currency: currCode,
             symbol,
             exchangeRate: rate,
-            ip: data.ipAddress || '197.156.112.44',
-            city: data.cityName || 'Addis Ababa',
+            ip: data.ipAddress || '',
+            city: data.cityName || DEFAULT_FALLBACK_CITY,
             loading: false,
           });
           return;
@@ -173,61 +154,40 @@ export default function App() {
         const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
           let countryName = 'Ethiopia';
           let currCode = 'ETB';
-          let symbol = 'Br';
-          let rate = 120;
-          let ip = '197.156.112.44';
           let city = 'Addis Ababa';
 
-          if (tz.includes('Europe/London') || tz.includes('Europe/Belfast')) {
-            countryName = 'United Kingdom';
-            currCode = 'GBP';
-            symbol = '£';
-            rate = 0.79;
-            ip = '82.165.197.12';
-            city = 'London';
-          } else if (tz.includes('America/New_York') || tz.includes('America/Chicago') || tz.includes('America/Los_Angeles') || tz.includes('US/')) {
-            countryName = 'United States';
-            currCode = 'USD';
-            symbol = '$';
-            rate = 1.0;
-            ip = '104.244.42.1';
-            city = 'New York';
-          } else if (tz.includes('Europe/')) {
-            countryName = 'Germany';
-            currCode = 'EUR';
-            symbol = '€';
-            rate = 0.92;
-            ip = '46.112.35.91';
-            city = 'Berlin';
-          } else if (tz.includes('America/Toronto') || tz.includes('America/Vancouver')) {
-            countryName = 'Canada';
-            currCode = 'CAD';
-            symbol = 'C$';
-            rate = 1.36;
-            ip = '198.50.150.111';
-            city = 'Toronto';
-          } else if (tz.includes('Asia/Riyadh')) {
-            countryName = 'Saudi Arabia';
-            currCode = 'SAR';
-            symbol = 'SR ';
-            rate = 3.75;
-            ip = '37.120.35.41';
-            city = 'Riyadh';
-          } else if (tz.includes('Africa/Nairobi') || tz.includes('Africa/Addis_Ababa') || tz.includes('EAT')) {
-            countryName = 'Ethiopia';
-            currCode = 'ETB';
-            symbol = 'Br';
-            rate = 120;
-            ip = '197.156.112.44';
-            city = 'Addis Ababa';
+          const TZ_MAP: Array<{ tzPart: string; country: string; curr: string; city: string }> = [
+            { tzPart: 'Europe/London', country: 'United Kingdom', curr: 'GBP', city: 'London' },
+            { tzPart: 'Europe/Belfast', country: 'United Kingdom', curr: 'GBP', city: 'London' },
+            { tzPart: 'America/New_York', country: 'United States', curr: 'USD', city: 'New York' },
+            { tzPart: 'America/Chicago', country: 'United States', curr: 'USD', city: 'New York' },
+            { tzPart: 'America/Los_Angeles', country: 'United States', curr: 'USD', city: 'New York' },
+            { tzPart: 'US/', country: 'United States', curr: 'USD', city: 'New York' },
+            { tzPart: 'Europe/', country: 'Germany', curr: 'EUR', city: 'Berlin' },
+            { tzPart: 'America/Toronto', country: 'Canada', curr: 'CAD', city: 'Toronto' },
+            { tzPart: 'America/Vancouver', country: 'Canada', curr: 'CAD', city: 'Toronto' },
+            { tzPart: 'Asia/Riyadh', country: 'Saudi Arabia', curr: 'SAR', city: 'Riyadh' },
+            { tzPart: 'Africa/Nairobi', country: 'Ethiopia', curr: 'ETB', city: 'Addis Ababa' },
+            { tzPart: 'Africa/Addis_Ababa', country: 'Ethiopia', curr: 'ETB', city: 'Addis Ababa' },
+            { tzPart: 'EAT', country: 'Ethiopia', curr: 'ETB', city: 'Addis Ababa' },
+          ];
+          for (const entry of TZ_MAP) {
+            if (tz.includes(entry.tzPart)) {
+              countryName = entry.country;
+              currCode = entry.curr;
+              city = entry.city;
+              break;
+            }
           }
+
+          const { symbol, rate } = getCurrencyConfig(currCode);
 
           setDetectedLocation({
             country: countryName,
             currency: currCode,
             symbol,
             exchangeRate: rate,
-            ip,
+            ip: '',
             city,
             loading: false,
           });
@@ -257,17 +217,33 @@ export default function App() {
   const handleSetUser = (newUser: Profile | null) => {
     setUser(newUser);
     if (newUser) {
-      localStorage.setItem('ace_scholar_current_user', JSON.stringify(newUser));
+      // Strip tokens before persisting to localStorage — tokens are managed by Supabase internally
+      const { access_token, refresh_token, ...safeProfile } = newUser as any;
+      localStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(safeProfile));
     } else {
-      localStorage.removeItem('ace_scholar_current_user');
+      localStorage.removeItem(LOCAL_STORAGE_USER_KEY);
     }
   };
+
+  // Sync IP-detected country to user profile so components (e.g. withdrawal methods) can detect it
+  useEffect(() => {
+    if (detectedLocation.loading) return;
+    const detected = detectedLocation.country;
+    if (!detected) return;
+    setUser(prev => {
+      if (!prev || prev.country === detected) return prev;
+      const updated = { ...prev, country: detected };
+      const { access_token, refresh_token, ...safeProfile } = updated as any;
+      localStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(safeProfile));
+      return updated;
+    });
+  }, [detectedLocation.loading, detectedLocation.country]);
 
   const handleLogout = () => {
     handleSetUser(null);
     showToast('Signed out successfully.', 'success');
     setCurrentPage('home');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo(0, 0);
   };
 
   // Safe wrapper for setting page type
@@ -278,13 +254,13 @@ export default function App() {
       return;
     }
     setCurrentPage(page);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo(0, 0);
   };
 
   const renderActivePage = () => {
     switch (currentPage) {
       case 'home':
-        return <Home setCurrentPage={handleSetPage} user={user} />;
+        return <Home setCurrentPage={handleSetPage} setSelectedServiceType={setSelectedServiceType} user={user} />;
       case 'services':
         return (
           <Services
@@ -347,6 +323,8 @@ export default function App() {
             user={user}
             setCurrentPage={handleSetPage}
             showToast={showToast}
+            setUser={handleSetUser}
+            detectedLocation={detectedLocation}
           />
         );
       case 'order':
@@ -393,12 +371,11 @@ export default function App() {
           setCurrentPage={handleSetPage}
           user={user}
           onLogout={handleLogout}
-          detectedLocation={detectedLocation}
         />
       )}
 
       {/* 2. MAIN SCROLLABLE CONTENT BODY */}
-      <main className="animate-fade-in" key={currentPage}>
+      <main className="animate-page-enter" key={currentPage}>
         {renderActivePage()}
       </main>
 
@@ -410,23 +387,27 @@ export default function App() {
       {/* 4. GLOBAL FLOATING SUPPORT CHANNEL */}
       {!isFullscreenPage && <WhatsAppButton />}
 
-      {/* 5. GORGEOUS CUSTOM SLATE FLOATING TOASTS */}
+      {/* 5. CUSTOM SLATE FLOATING TOASTS */}
       {toast && (
         <div
           className={`fixed bottom-6 left-6 z-50 p-4 rounded-xl border shadow-2xl flex items-center gap-3 animate-slide-in-left max-w-sm ${
             toast.type === 'success'
-              ? 'bg-slate-900 border-emerald-500/30 text-emerald-400'
-              : 'bg-slate-900 border-rose-500/30 text-rose-400'
+              ? 'bg-slate-900/95 border-emerald-500/30 text-emerald-400 backdrop-blur-xl'
+              : 'bg-slate-900/95 border-rose-500/30 text-rose-400 backdrop-blur-xl'
           }`}
           id="global-toast-notification"
         >
           <div className="p-1.5 rounded-lg bg-slate-950">
-            <ShieldCheck className={`h-5 w-5 ${toast.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`} />
+            {toast.type === 'success' ? (
+              <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+            ) : (
+              <AlertCircle className="h-5 w-5 text-rose-400" />
+            )}
           </div>
-          <p className="text-xs font-semibold text-slate-100">{toast.message}</p>
+          <p className="text-sm font-semibold text-slate-100">{toast.message}</p>
           <button
             onClick={() => setToast(null)}
-            className="p-1 hover:bg-slate-800 rounded transition-colors ml-auto shrink-0 cursor-pointer"
+            className="p-1 hover:bg-slate-800 rounded-lg transition-colors ml-auto shrink-0 cursor-pointer"
           >
             <X className="h-4 w-4 text-slate-400 hover:text-white" />
           </button>

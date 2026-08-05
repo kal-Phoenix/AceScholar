@@ -3,21 +3,31 @@ import {
   GraduationCap, Clock, AlertCircle, RefreshCw, Send, CheckCircle2, 
   MessageSquare, Download, FileText, Save, Check, Paperclip, 
   ClipboardList, Sparkles, UserCheck, Calendar, X,
-  Coins, DollarSign, TrendingUp
+  Coins, DollarSign, TrendingUp, Wallet, Star, ArrowDownToLine
 } from 'lucide-react';
-import { PageType, Profile, Order as AcademicOrder, Message, Payment } from '../types';
+import { PageType, Profile, Order as AcademicOrder, Message, Payment, Withdrawal, Rating } from '../types';
 import { fallbackDb, getAuthHeaders } from '../lib/supabase';
+import {
+  MAX_FILE_SIZE_BYTES, POLLING_INTERVAL_MS, HOURS_DIVISOR,
+  DEFAULT_EXCHANGE_RATES, LOCAL_STORAGE_USER_KEY,
+} from '../lib/constants';
+import NotificationBell from './NotificationBell';
 
 interface ExpertProps {
   user: Profile | null;
   setCurrentPage: (page: PageType) => void;
   showToast?: (message: string, type: 'success' | 'error') => void;
+  setUser?: (user: Profile | null) => void;
+  detectedLocation?: { country: string; currency: string; symbol: string; exchangeRate: number; ip: string; city?: string };
 }
 
-export default function Expert({ user, setCurrentPage, showToast }: ExpertProps) {
+export default function Expert({ user, setCurrentPage, showToast, setUser, detectedLocation }: ExpertProps) {
+  const isEthiopia = detectedLocation?.country?.toLowerCase().includes('ethiopia') || user?.country?.toLowerCase().includes('ethiopia') || false;
+  const ETB_RATE = DEFAULT_EXCHANGE_RATES.ETB?.rate || 120;
+
   const [assignedOrders, setAssignedOrders] = useState<AcademicOrder[]>([]);
   const [availableOrders, setAvailableOrders] = useState<AcademicOrder[]>([]);
-  const [activeTab, setActiveTab] = useState<'assigned' | 'available' | 'earnings'>('assigned');
+  const [activeTab, setActiveTab] = useState<'assigned' | 'available' | 'earnings' | 'completed'>('assigned');
   const [selectedOrder, setSelectedOrder] = useState<AcademicOrder | null>(null);
   
   // New simplified workbench sub-tabs
@@ -26,6 +36,14 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
 
   // Expert earnings state
   const [myPayments, setMyPayments] = useState<Payment[]>([]);
+  const [myWithdrawals, setMyWithdrawals] = useState<Withdrawal[]>([]);
+  const [myRatings, setMyRatings] = useState<Rating[]>([]);
+  const [balance, setBalance] = useState({ total_earnings: 0, total_withdrawn: 0, available_balance: 0 });
+  const [showWithdrawForm, setShowWithdrawForm] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [withdrawMethod, setWithdrawMethod] = useState('telebirr');
+  const [withdrawAccount, setWithdrawAccount] = useState('');
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
   
   // Chat state
   const [messages, setMessages] = useState<Message[]>([]);
@@ -42,10 +60,13 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const activeAssignedOrders = assignedOrders.filter(o => o.status !== 'delivered');
+  const completedOrders = assignedOrders.filter(o => o.status === 'delivered');
+
   const handleDeliverableFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      if (file.size > 40 * 1024 * 1024) {
+      if (file.size > MAX_FILE_SIZE_BYTES) {
         if (showToast) showToast('File is too large. Max size is 40MB.', 'error');
         return;
       }
@@ -72,8 +93,6 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
     });
   };
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     fetchExpertOrders();
   }, [user]);
@@ -92,24 +111,19 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
     if (!selectedOrder) return;
     const interval = setInterval(() => {
       fetchMessagesForOrder(selectedOrder.id);
-    }, 5000);
+    }, POLLING_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [selectedOrder?.id]);
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
 
   const fetchExpertOrders = async () => {
     if (!user) return;
     try {
-      const [ordersResult, allPayments] = await Promise.all([
+      const [ordersResult, allPayments, withdrawals, ratingsData, balanceData] = await Promise.all([
         fallbackDb.getOrders(1, 500),
-        fallbackDb.getPayments()
+        fallbackDb.getPayments(),
+        fallbackDb.getWithdrawals(),
+        fallbackDb.getExpertRatings(user.email),
+        fallbackDb.getBalance(),
       ]);
       const allOrders = ordersResult.data;
       
@@ -154,6 +168,9 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
       // Filter payments that belong to my assigned orders
       const myOrderIds = new Set(myAssigned.map(o => o.id));
       setMyPayments(allPayments.filter(p => myOrderIds.has(p.order_id)));
+      setMyWithdrawals(withdrawals);
+      setMyRatings(ratingsData);
+      setBalance(balanceData);
       
       const currentList = activeTab === 'assigned' ? myAssigned : openOrders;
       
@@ -176,7 +193,46 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
     }
   };
 
-
+  const handleRequestWithdrawal = async () => {
+    if (!user) return;
+    const inputAmount = parseFloat(withdrawAmount);
+    if (!inputAmount || inputAmount <= 0) {
+      if (showToast) showToast('Please enter a valid amount.', 'error');
+      return;
+    }
+    if (!withdrawAccount.trim()) {
+      if (showToast) showToast('Please enter your account details.', 'error');
+      return;
+    }
+    // Convert ETB to USD for storage
+    const amountInUSD = isEthiopia ? inputAmount / ETB_RATE : inputAmount;
+    if (amountInUSD > balance.available_balance) {
+      if (showToast) showToast(`Insufficient balance. Available: ${isEthiopia ? `${(balance.available_balance * ETB_RATE).toLocaleString()} ETB` : `$${balance.available_balance.toFixed(2)} USD`}`, 'error');
+      return;
+    }
+    setIsWithdrawing(true);
+    try {
+      const result = await fallbackDb.requestWithdrawal({
+        amount: amountInUSD,
+        method: withdrawMethod,
+        account_details: withdrawAccount,
+        currency: isEthiopia ? 'ETB' : 'USD',
+      });
+      if (result) {
+        if (showToast) showToast('Withdrawal request submitted!', 'success');
+        setShowWithdrawForm(false);
+        setWithdrawAmount('');
+        setWithdrawAccount('');
+        await fetchExpertOrders();
+      } else {
+        if (showToast) showToast('Failed to submit withdrawal request.', 'error');
+      }
+    } catch (e) {
+      if (showToast) showToast('Failed to submit withdrawal request.', 'error');
+    } finally {
+      setIsWithdrawing(false);
+    }
+  };
 
   const handleApplyOrder = async (orderId: string) => {
     if (!user) return;
@@ -192,14 +248,6 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || `HTTP ${res.status}`);
       }
-
-      await fallbackDb.postMessage({
-        order_id: orderId,
-        sender_id: user.id,
-        sender_name: user.full_name,
-        content: `📝 Application submitted: Expert ${user.full_name} has applied for this project. Awaiting admin coordinator approval.`,
-        is_admin: true,
-      });
 
       if (showToast) showToast('Application submitted! Awaiting admin approval.', 'success');
       await fetchExpertOrders();
@@ -248,7 +296,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
         sender_id: user.id,
         sender_name: `${user.full_name} (Expert)`,
         content: typedMessage.trim(),
-        is_admin: true,
+        is_admin: false,
       });
 
       if (sent) setMessages(prev => [...prev, sent]);
@@ -303,17 +351,6 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
         internal_notes: internalNotes,
       });
       if (updated) setSelectedOrder(updated);
-
-      // Auto append notification to message board if status changed to delivered
-      if (orderStatus === 'delivered' && selectedOrder.status !== 'delivered') {
-        await fallbackDb.postMessage({
-          order_id: selectedOrder.id,
-          sender_name: 'Coordinator Desk',
-          sender_id: user.id,
-          content: `🎉 [Academic Solution Uploaded] The final deliverables have been attached. Download is now enabled.`,
-          is_admin: true,
-        });
-      }
 
       if (showToast) showToast('Assignment settings saved.', 'success');
       await fetchExpertOrders();
@@ -384,6 +421,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
             <span className="text-xs font-mono bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800 text-slate-300">
               {user.email}
             </span>
+            <NotificationBell userEmail={user.email} />
           </div>
         </div>
       </div>
@@ -395,7 +433,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
           <div className="bg-slate-900 border border-slate-800/60 p-4 rounded-xl flex items-center justify-between shadow-md">
             <div className="space-y-1">
               <span className="text-[10px] uppercase font-semibold text-slate-400 tracking-wider">My Active Assignments</span>
-              <p className="text-lg sm:text-2xl font-black text-white">{assignedOrders.length}</p>
+              <p className="text-lg sm:text-2xl font-black text-white">{activeAssignedOrders.length}</p>
             </div>
             <ClipboardList className="h-5 w-5 text-amber-400" />
           </div>
@@ -412,7 +450,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
             <div className="space-y-1">
               <span className="text-[10px] uppercase font-semibold text-slate-400 tracking-wider">Completed</span>
               <p className="text-lg sm:text-2xl font-black text-white">
-                {assignedOrders.filter(o => o.status === 'delivered').length}
+                {completedOrders.length}
               </p>
             </div>
             <CheckCircle2 className="h-5 w-5 text-emerald-400" />
@@ -429,27 +467,41 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
         </div>
 
         {/* Tab switcher */}
-        <div className="flex border-b border-slate-800 mb-6 gap-2">
+        <div className="flex border-b border-slate-800 mb-6 gap-2 overflow-x-auto">
           <button
             onClick={() => {
               setActiveTab('assigned');
-              setSelectedOrder(assignedOrders[0] || null);
+              setSelectedOrder(activeAssignedOrders[0] || null);
             }}
-            className={`py-3 px-4 sm:px-6 text-xs sm:text-sm font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 ${
+            className={`py-3 px-4 sm:px-6 text-xs sm:text-sm font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 shrink-0 ${
               activeTab === 'assigned'
                 ? 'border-amber-500 text-amber-500'
                 : 'border-transparent text-slate-400 hover:text-white'
             }`}
           >
             <ClipboardList className="h-4 w-4" />
-            <span>My Assigned Projects ({assignedOrders.length})</span>
+            <span>My Assigned Projects ({activeAssignedOrders.length})</span>
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('completed');
+              setSelectedOrder(completedOrders[0] || null);
+            }}
+            className={`py-3 px-4 sm:px-6 text-xs sm:text-sm font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 shrink-0 ${
+              activeTab === 'completed'
+                ? 'border-emerald-500 text-emerald-500'
+                : 'border-transparent text-slate-400 hover:text-white'
+            }`}
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            <span>Completed Projects ({completedOrders.length})</span>
           </button>
           <button
             onClick={() => {
               setActiveTab('available');
               setSelectedOrder(availableOrders[0] || null);
             }}
-            className={`py-3 px-4 sm:px-6 text-xs sm:text-sm font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 ${
+            className={`py-3 px-4 sm:px-6 text-xs sm:text-sm font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 shrink-0 ${
               activeTab === 'available'
                 ? 'border-amber-500 text-amber-500'
                 : 'border-transparent text-slate-400 hover:text-white'
@@ -460,7 +512,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
           </button>
           <button
             onClick={() => setActiveTab('earnings')}
-            className={`py-3 px-4 sm:px-6 text-xs sm:text-sm font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 ${
+            className={`py-3 px-4 sm:px-6 text-xs sm:text-sm font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 shrink-0 ${
               activeTab === 'earnings'
                 ? 'border-amber-500 text-amber-500'
                 : 'border-transparent text-slate-400 hover:text-white'
@@ -471,15 +523,65 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
           </button>
         </div>
 
-        {((activeTab === 'assigned' ? assignedOrders : availableOrders).length === 0) ? (
+        {/* Availability Toggle */}
+        <div className="flex items-center justify-between mb-6 bg-slate-900 border border-slate-800 rounded-xl px-4 py-3">
+          <div className="flex items-center gap-3">
+            <div className={`h-2.5 w-2.5 rounded-full ${user?.is_available !== false ? 'bg-emerald-500 animate-pulse' : 'bg-slate-600'}`} />
+            <div>
+              <p className="text-xs font-bold text-white">
+                {user?.is_available !== false ? 'Available for Orders' : 'Currently Offline'}
+              </p>
+              <p className="text-[10px] text-slate-400">
+                {user?.is_available !== false
+                  ? 'You will receive new order assignments'
+                  : 'Toggle on to receive new assignments'}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={async () => {
+              if (!user) return;
+              const newAvailability = user.is_available === false;
+              try {
+                const res = await fetch(`/api/profiles/${user.id}/availability`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
+                  body: JSON.stringify({ is_available: newAvailability }),
+                });
+                if (res.ok) {
+                  const updatedUser = { ...user, is_available: newAvailability };
+                  if (setUser) setUser(updatedUser);
+                  localStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(updatedUser));
+                  if (showToast) showToast(
+                    newAvailability ? 'You are now online and available for orders' : 'You are now offline',
+                    'success'
+                  );
+                }
+              } catch (e) {
+                if (showToast) showToast('Failed to update availability', 'error');
+              }
+            }}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${
+              user?.is_available !== false ? 'bg-emerald-500' : 'bg-slate-700'
+            }`}
+          >
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+              user?.is_available !== false ? 'translate-x-6' : 'translate-x-1'
+            }`} />
+          </button>
+        </div>
+
+        {activeTab === 'earnings' ? null : ((activeTab === 'assigned' ? activeAssignedOrders : activeTab === 'completed' ? completedOrders : availableOrders).length === 0) ? (
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center max-w-2xl mx-auto space-y-4">
             <GraduationCap className="h-10 w-10 text-slate-500 mx-auto" />
             <h2 className="text-lg font-bold text-white">
-              {activeTab === 'assigned' ? 'No active assignments allocated yet' : 'No available student orders'}
+              {activeTab === 'assigned' ? 'No active assignments allocated yet' : activeTab === 'completed' ? 'No completed projects yet' : 'No available student orders'}
             </h2>
             <p className="text-xs text-slate-400 leading-relaxed">
-              {activeTab === 'assigned' 
-                ? 'Check the "Explore Available Student Orders" tab to bid and apply on active unassigned requests placed by students.' 
+              {activeTab === 'assigned'
+                ? 'Check the "Explore Available Student Orders" tab to bid and apply on active unassigned requests placed by students.'
+                : activeTab === 'completed'
+                ? 'Projects you have completed will appear here once they are marked as delivered.'
                 : 'All student projects have currently been claimed. When new custom tasks, mathematics solutions, or essays are submitted by students, they will instantly display here.'}
             </p>
             <button 
@@ -497,7 +599,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
             <div className="lg:col-span-5 space-y-4">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                  {activeTab === 'assigned' ? 'Assigned work ledgers' : 'Available student orders'} ({(activeTab === 'assigned' ? assignedOrders : availableOrders).length})
+                  {activeTab === 'assigned' ? 'Assigned work ledgers' : activeTab === 'completed' ? 'Completed projects' : 'Available student orders'} ({(activeTab === 'assigned' ? activeAssignedOrders : activeTab === 'completed' ? completedOrders : availableOrders).length})
                 </span>
                 <button 
                   onClick={fetchExpertOrders} 
@@ -509,7 +611,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
               </div>
 
               <div className="space-y-3 max-h-[550px] overflow-y-auto pr-1">
-                {(activeTab === 'assigned' ? assignedOrders : availableOrders).map(order => {
+                {(activeTab === 'assigned' ? activeAssignedOrders : activeTab === 'completed' ? completedOrders : availableOrders).map(order => {
                   const isSelected = selectedOrder?.id === order.id;
                   const expertHasApplied = order.applicants?.some(a => a.expert_email.toLowerCase() === user.email.toLowerCase());
                   // Parse budget for net earnings display
@@ -517,7 +619,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
                   const grossUSD = usdMatch ? Number(usdMatch[1]) : null;
                   const netUSD = grossUSD ? (grossUSD * 0.9).toFixed(0) : null;
                   // Deadline urgency
-                  const hoursUntilDeadline = (new Date(order.deadline).getTime() - Date.now()) / 3600000;
+                  const hoursUntilDeadline = (new Date(order.deadline).getTime() - Date.now()) / HOURS_DIVISOR;
                   const isUrgent = hoursUntilDeadline < 24;
                   const isSoon = hoursUntilDeadline < 72;
                   
@@ -526,7 +628,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
                       key={order.id}
                       onClick={() => {
                         setSelectedOrder(order);
-                        if (activeTab === 'assigned') {
+                        if (activeTab === 'assigned' || activeTab === 'completed') {
                           setOrderStatus(order.status);
                           setDeliveryFileName(order.delivery_name || '');
                           setInternalNotes(order.internal_notes || '');
@@ -557,7 +659,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
                           <span className="text-[9px] font-bold font-mono text-slate-500">{order.id.toUpperCase()}</span>
                           <span className="bg-slate-800 text-slate-400 text-[9px] px-1.5 py-0.5 rounded font-medium">{order.academic_level}</span>
                         </div>
-                        {activeTab === 'assigned' ? (
+                        {activeTab === 'assigned' || activeTab === 'completed' ? (
                           getStatusBadge(order.status)
                         ) : expertHasApplied ? (
                           <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">Applied</span>
@@ -575,6 +677,16 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
                           <Calendar className="h-3 w-3" />
                           <span>Due: {new Date(order.deadline).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>
                         </span>
+                        {activeTab === 'assigned' && order.status !== 'delivered' && (
+                          <span className={`flex items-center gap-1 font-mono font-bold ${
+                            hoursUntilDeadline < 0 ? 'text-rose-400' : hoursUntilDeadline < 24 ? 'text-rose-400 animate-pulse' : hoursUntilDeadline < 72 ? 'text-amber-400' : 'text-slate-400'
+                          }`}>
+                            <Clock className="h-3 w-3" />
+                            {hoursUntilDeadline < 0
+                              ? `Overdue ${Math.abs(Math.ceil(hoursUntilDeadline))}h`
+                              : `${Math.ceil(hoursUntilDeadline)}h left`}
+                          </span>
+                        )}
                         <div className="text-right">
                           <span className="text-amber-400 font-bold">{order.budget_range?.split('(')[0]?.trim()}</span>
                           {netUSD && (
@@ -600,7 +712,7 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
                   <div className="flex flex-col sm:flex-row justify-between items-start gap-3 border-b border-slate-800 pb-4">
                     <div>
                       <span className="text-[10px] uppercase font-bold text-amber-400 tracking-wider">
-                        {activeTab === 'assigned' ? 'Active Workspace' : 'Student Request Details'}
+                        {activeTab === 'assigned' ? 'Active Workspace' : activeTab === 'completed' ? 'Completed Project' : 'Student Request Details'}
                       </span>
                       <h2 className="text-lg font-bold text-white tracking-tight">{selectedOrder.subject}</h2>
                       <span className="text-xs text-slate-400">{selectedOrder.service_type} &bull; {selectedOrder.academic_level}</span>
@@ -614,8 +726,8 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
                     </div>
                   </div>
 
-                  {/* Inner Workbench Tab Menu (For Assigned Projects only) */}
-                  {activeTab === 'assigned' && selectedOrder.expert_accepted !== false && (
+                  {/* Inner Workbench Tab Menu (For Assigned & Completed Projects) */}
+                  {(activeTab === 'assigned' || activeTab === 'completed') && selectedOrder.expert_accepted !== false && (
                     <div className="flex bg-slate-950 p-1 rounded-lg gap-1 border border-slate-800 shrink-0">
                       <button
                         onClick={() => setWorkbenchTab('details')}
@@ -728,7 +840,6 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
                             );
                           })
                         )}
-                        <div ref={messagesEndRef} />
                       </div>
 
                       {/* Send Form */}
@@ -959,15 +1070,6 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
                                         });
                                         if (updated) setSelectedOrder(updated);
 
-                                        // Notify admin via chat
-                                        await fallbackDb.postMessage({
-                                          order_id: selectedOrder.id,
-                                          sender_name: `${user.full_name} (Expert)`,
-                                          sender_id: user.id,
-                                          content: `📤 [Submission for Review] I have uploaded the completed solution file "${submissionName}". Please review and notify the student when ready.`,
-                                          is_admin: true,
-                                        });
-
                                         setOrderStatus('under_review');
 
                                         if (showToast) showToast('Assignment submitted for Admin review!', 'success');
@@ -1067,38 +1169,61 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-1">
-                <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  <span>Total Earnings (USD)</span>
-                  <DollarSign className="h-3.5 w-3.5 text-amber-500" />
+            {(() => {
+              const ETB_RATE = DEFAULT_EXCHANGE_RATES.ETB?.rate || 120;
+              const settledPayments = myPayments.filter(p => p.status === 'approved' || p.status === 'settled');
+              const pendingPayments = myPayments.filter(p => p.status === 'pending');
+              const totalUSD = settledPayments.filter(p => p.currency === 'USD').reduce((s, p) => s + p.expert_amount, 0);
+              const totalETB = settledPayments.filter(p => p.currency !== 'USD').reduce((s, p) => s + p.expert_amount, 0);
+              const pendingUSD = pendingPayments.filter(p => p.currency === 'USD').reduce((s, p) => s + p.expert_amount, 0);
+              const pendingETB = pendingPayments.filter(p => p.currency !== 'USD').reduce((s, p) => s + p.expert_amount, 0);
+              const grandTotalUSD = totalUSD + totalETB / ETB_RATE;
+              const grandTotalETB = totalUSD * ETB_RATE + totalETB;
+              const pendingTotalUSD = pendingUSD + pendingETB / ETB_RATE;
+              const pendingTotalETB = pendingUSD * ETB_RATE + pendingETB;
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-1">
+                    <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      <span>Settled Earnings</span>
+                      {isEthiopia ? <span className="text-amber-500 font-mono">ETB</span> : <DollarSign className="h-3.5 w-3.5 text-amber-500" />}
+                    </div>
+                    {isEthiopia ? (
+                      <>
+                        <p className="text-lg font-extrabold text-white">{grandTotalETB.toLocaleString(undefined, { maximumFractionDigits: 0 })} ETB</p>
+                        <p className="text-xs text-slate-500 font-mono">${grandTotalUSD.toFixed(2)} USD</p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-lg font-extrabold text-white">${grandTotalUSD.toFixed(2)} USD</p>
+                        <p className="text-xs text-slate-500 font-mono">{grandTotalETB.toLocaleString(undefined, { maximumFractionDigits: 0 })} ETB</p>
+                      </>
+                    )}
+                    {pendingPayments.length > 0 && (
+                      <p className="text-[10px] text-amber-500 font-mono mt-1">
+                        +{isEthiopia ? `${pendingTotalETB.toLocaleString(undefined, { maximumFractionDigits: 0 })} ETB` : `$${pendingTotalUSD.toFixed(2)} USD`} pending
+                      </p>
+                    )}
+                  </div>
+                  <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-1">
+                    <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      <span>Settled Payments</span>
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                    </div>
+                    <p className="text-lg font-extrabold text-emerald-400">{settledPayments.length}</p>
+                    <p className="text-xs text-slate-500 font-light">{pendingPayments.length > 0 ? `${pendingPayments.length} pending review` : 'All transactions settled'}</p>
+                  </div>
+                  <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-1">
+                    <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      <span>Completed Projects</span>
+                      <TrendingUp className="h-3.5 w-3.5 text-sky-400" />
+                    </div>
+                    <p className="text-lg font-extrabold text-sky-400">{assignedOrders.filter(o => o.status === 'delivered').length}</p>
+                    <p className="text-xs text-slate-500 font-light">Delivered to students</p>
+                  </div>
                 </div>
-                <p className="text-lg font-extrabold text-white">
-                  {myPayments.filter(p => p.currency === 'USD').reduce((s, p) => s + p.expert_amount, 0).toLocaleString()} USD
-                </p>
-                <p className="text-xs text-slate-500 font-mono">
-                  {myPayments.filter(p => p.currency !== 'USD').reduce((s, p) => s + p.expert_amount, 0).toLocaleString()} ETB
-                </p>
-              </div>
-              <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-1">
-                <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  <span>Settled Payments</span>
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                </div>
-                <p className="text-lg font-extrabold text-emerald-400">{myPayments.length}</p>
-                <p className="text-xs text-slate-500 font-light">Transactions recorded</p>
-              </div>
-              <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-1">
-                <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  <span>Completed Projects</span>
-                  <TrendingUp className="h-3.5 w-3.5 text-sky-400" />
-                </div>
-                <p className="text-lg font-extrabold text-sky-400">
-                  {assignedOrders.filter(o => o.status === 'delivered').length}
-                </p>
-                <p className="text-xs text-slate-500 font-light">Delivered to students</p>
-              </div>
-            </div>
+              );
+            })()}
 
             {/* Earnings Table */}
             {myPayments.length === 0 ? (
@@ -1115,17 +1240,32 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
                       <th className="p-3">Payment ID</th>
                       <th className="p-3">Gross Amount</th>
                       <th className="p-3">Your Share (90%)</th>
+                      <th className="p-3">Status</th>
                       <th className="p-3">Method</th>
                       <th className="p-3">Date</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 bg-slate-950/20">
-                    {myPayments.map((p) => (
-                      <tr key={p.id} className="hover:bg-slate-900/40 transition-colors">
+                    {[...myPayments].sort((a, b) => {
+                      const order = { approved: 0, settled: 0, pending: 1, rejected: 2 };
+                      return (order[a.status as keyof typeof order] ?? 1) - (order[b.status as keyof typeof order] ?? 1);
+                    }).map((p) => (
+                      <tr key={p.id} className={`hover:bg-slate-900/40 transition-colors ${p.status === 'rejected' ? 'opacity-50' : ''}`}>
                         <td className="p-3 font-mono text-amber-500 font-bold">{p.order_id}</td>
                         <td className="p-3 font-mono text-slate-400 text-[10px]">{p.id}</td>
                         <td className="p-3 font-bold text-white">{p.amount.toLocaleString()} {p.currency}</td>
                         <td className="p-3 text-emerald-400 font-extrabold font-mono text-sm">+{p.expert_amount.toLocaleString()} {p.currency}</td>
+                        <td className="p-3">
+                          <span className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                            p.status === 'approved' || p.status === 'settled'
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                              : p.status === 'pending'
+                              ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                              : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                          }`}>
+                            {p.status === 'approved' || p.status === 'settled' ? 'Settled' : p.status === 'pending' ? 'Pending' : 'Rejected'}
+                          </span>
+                        </td>
                         <td className="p-3 uppercase font-mono text-slate-400">{p.provider_id}</td>
                         <td className="p-3 text-slate-400 font-mono text-[10px]">
                           {new Date(p.created_at).toLocaleDateString()} {new Date(p.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -1134,6 +1274,207 @@ export default function Expert({ user, setCurrentPage, showToast }: ExpertProps)
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {/* Balance & Withdrawal Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                    <Wallet className="h-4 w-4 text-emerald-500" />
+                    Available Balance
+                  </h3>
+                  <button
+                    onClick={() => setShowWithdrawForm(!showWithdrawForm)}
+                    className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-black text-[10px] font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                  >
+                    <ArrowDownToLine className="h-3 w-3" />
+                    Withdraw
+                  </button>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="text-center p-3 bg-slate-900 rounded-lg">
+                    <p className="text-[10px] text-slate-500 uppercase font-bold">Available</p>
+                    {isEthiopia ? (
+                      <>
+                        <p className="text-lg font-black text-emerald-400">{(balance.available_balance * ETB_RATE).toLocaleString(undefined, { maximumFractionDigits: 0 })} <span className="text-xs">ETB</span></p>
+                        <p className="text-[10px] text-slate-500 font-mono">${balance.available_balance.toFixed(2)} USD</p>
+                      </>
+                    ) : (
+                      <p className="text-lg font-black text-emerald-400">${balance.available_balance.toFixed(2)}</p>
+                    )}
+                  </div>
+                  <div className="text-center p-3 bg-slate-900 rounded-lg">
+                    <p className="text-[10px] text-slate-500 uppercase font-bold">Withdrawn</p>
+                    {isEthiopia ? (
+                      <>
+                        <p className="text-lg font-black text-slate-300">{(balance.total_withdrawn * ETB_RATE).toLocaleString(undefined, { maximumFractionDigits: 0 })} <span className="text-xs">ETB</span></p>
+                        <p className="text-[10px] text-slate-500 font-mono">${balance.total_withdrawn.toFixed(2)} USD</p>
+                      </>
+                    ) : (
+                      <p className="text-lg font-black text-slate-300">${balance.total_withdrawn.toFixed(2)}</p>
+                    )}
+                  </div>
+                  <div className="text-center p-3 bg-slate-900 rounded-lg">
+                    <p className="text-[10px] text-slate-500 uppercase font-bold">Total Earned</p>
+                    {isEthiopia ? (
+                      <>
+                        <p className="text-lg font-black text-amber-400">{(balance.total_earnings * ETB_RATE).toLocaleString(undefined, { maximumFractionDigits: 0 })} <span className="text-xs">ETB</span></p>
+                        <p className="text-[10px] text-slate-500 font-mono">${balance.total_earnings.toFixed(2)} USD</p>
+                      </>
+                    ) : (
+                      <p className="text-lg font-black text-amber-400">${balance.total_earnings.toFixed(2)}</p>
+                    )}
+                  </div>
+                </div>
+                {showWithdrawForm && (
+                  <div className="border-t border-slate-800 pt-4 space-y-3">
+                    <div>
+                      <label className="text-[10px] text-slate-400 uppercase font-bold mb-1 block">
+                        Amount {isEthiopia ? '(ETB)' : '(USD)'}
+                      </label>
+                      <input type="number" value={withdrawAmount} onChange={e => setWithdrawAmount(e.target.value)}
+                        max={isEthiopia ? balance.available_balance * ETB_RATE : balance.available_balance}
+                        placeholder={isEthiopia ? '0' : '0.00'}
+                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        Max: {isEthiopia
+                          ? `${(balance.available_balance * ETB_RATE).toLocaleString(undefined, { maximumFractionDigits: 0 })} ETB ($${balance.available_balance.toFixed(2)} USD)`
+                          : `$${balance.available_balance.toFixed(2)} USD`}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400 uppercase font-bold mb-1 block">Method</label>
+                      {isEthiopia ? (
+                        <div className="grid grid-cols-3 gap-2">
+                          {[
+                            { value: 'telebirr', label: 'TeleBirr', icon: '📱' },
+                            { value: 'cbe', label: 'CBE', icon: '🏦' },
+                            { value: 'boa', label: 'BOA', icon: '🏛️' },
+                          ].map(m => (
+                            <button
+                              key={m.value}
+                              type="button"
+                              onClick={() => setWithdrawMethod(m.value)}
+                              className={`flex flex-col items-center gap-1 p-2.5 rounded-lg border text-[10px] font-bold transition-all cursor-pointer ${
+                                withdrawMethod === m.value
+                                  ? 'bg-amber-500/10 border-amber-500/40 text-amber-400'
+                                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-300'
+                              }`}
+                            >
+                              <span className="text-base">{m.icon}</span>
+                              <span>{m.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <select value={withdrawMethod} onChange={e => setWithdrawMethod(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500">
+                          <option value="card">Debit/Credit Card</option>
+                        </select>
+                      )}
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400 uppercase font-bold mb-1 block">
+                        {withdrawMethod === 'telebirr' ? 'Phone Number' : 'Account Number'}
+                      </label>
+                      <input type="text" value={withdrawAccount} onChange={e => setWithdrawAccount(e.target.value)}
+                        placeholder={withdrawMethod === 'telebirr' ? '09XXXXXXXX' : 'Enter your account number'}
+                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-500" />
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={handleRequestWithdrawal} disabled={isWithdrawing}
+                        className="flex-1 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-bold text-xs py-2 rounded-lg transition-colors cursor-pointer">
+                        {isWithdrawing ? 'Submitting...' : 'Submit Request'}
+                      </button>
+                      <button onClick={() => setShowWithdrawForm(false)}
+                        className="px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold py-2 rounded-lg transition-colors cursor-pointer">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 space-y-3">
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                  <ArrowDownToLine className="h-4 w-4 text-sky-400" />
+                  Withdrawal History
+                </h3>
+                {myWithdrawals.length === 0 ? (
+                  <p className="text-xs text-slate-500 text-center py-6">No withdrawal requests yet</p>
+                ) : (
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {myWithdrawals.map(w => (
+                      <div key={w.id} className="p-3 bg-slate-900 rounded-lg border border-slate-800">
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-xs font-bold text-white">
+                            {w.currency === 'ETB'
+                              ? `${(w.amount * ETB_RATE).toLocaleString(undefined, { maximumFractionDigits: 0 })} ETB`
+                              : `$${w.amount.toFixed(2)} USD`}
+                          </p>
+                          <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                            w.status === 'approved' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                              : w.status === 'pending' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                              : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                          }`}>
+                            {w.status}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                          <span className="capitalize">{w.method}</span>
+                          <span>•</span>
+                          <span>{new Date(w.created_at).toLocaleDateString()}</span>
+                        </div>
+                        {w.account_details && (
+                          <p className="text-[10px] text-slate-600 mt-1 font-mono truncate">Account: {w.account_details}</p>
+                        )}
+                        {w.admin_note && (
+                          <p className="text-[10px] text-amber-400/80 mt-1">Note: {w.admin_note}</p>
+                        )}
+                        {w.admin_screenshot && (
+                          <div className="mt-2">
+                            <button
+                              onClick={() => window.open(w.admin_screenshot, '_blank')}
+                              className="text-[10px] text-sky-400 hover:text-sky-300 font-bold flex items-center gap-1 cursor-pointer"
+                            >
+                              <Download className="h-3 w-3" />
+                              View Payment Proof
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Ratings Section */}
+            {myRatings.length > 0 && (
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 space-y-3">
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                  <Star className="h-4 w-4 text-amber-500" />
+                  Client Reviews
+                  <span className="text-slate-500 font-normal">({(myRatings.reduce((s, r) => s + r.score, 0) / myRatings.length).toFixed(1)} avg)</span>
+                </h3>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {myRatings.map(r => (
+                    <div key={r.id} className="p-3 bg-slate-900 rounded-lg">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-bold text-white">{r.client_name}</span>
+                        <div className="flex items-center gap-0.5">
+                          {[1, 2, 3, 4, 5].map(s => (
+                            <Star key={s} className={`h-3 w-3 ${s <= r.score ? 'text-amber-400 fill-amber-400' : 'text-slate-700'}`} />
+                          ))}
+                        </div>
+                      </div>
+                      {r.comment && <p className="text-[11px] text-slate-400 mt-1">{r.comment}</p>}
+                      <p className="text-[9px] text-slate-600 mt-1 font-mono">Order: {r.order_id}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 

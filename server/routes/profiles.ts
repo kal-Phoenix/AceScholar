@@ -9,20 +9,51 @@ const router = Router();
 // User cache for admin operations
 let userCache: { users: any[]; fetchedAt: number } = { users: [], fetchedAt: 0 };
 const USER_CACHE_TTL_MS = 60_000;
+const USER_CACHE_MAX_STALE_MS = 300_000; // 5 minutes max staleness
 
 export async function getCachedUsers(): Promise<any[]> {
   const now = Date.now();
   if (userCache.users.length > 0 && (now - userCache.fetchedAt) < USER_CACHE_TTL_MS) {
     return userCache.users;
   }
-  const adminClient = supabaseAdmin || db;
-  const { data, error } = await adminClient.auth.admin.listUsers();
-  if (error) {
-    console.error('getCachedUsers: listUsers failed:', error.message);
+  // If cache is stale but within max-staleness, serve stale + refresh in background
+  const isStale = userCache.users.length > 0 && (now - userCache.fetchedAt) >= USER_CACHE_TTL_MS;
+  const isTooOld = userCache.users.length > 0 && (now - userCache.fetchedAt) >= USER_CACHE_MAX_STALE_MS;
+
+  // If too old, block and refresh; if just stale, serve stale and refresh async
+  if (isTooOld) {
+    const adminClient = supabaseAdmin || db;
+    const { data, error } = await adminClient.auth.admin.listUsers();
+    if (!error) {
+      userCache.users = data?.users || [];
+      userCache.fetchedAt = now;
+    }
     return userCache.users;
   }
-  userCache.users = data?.users || [];
-  userCache.fetchedAt = now;
+
+  if (isStale) {
+    // Refresh in background — return stale data immediately
+    const adminClient = supabaseAdmin || db;
+    adminClient.auth.admin.listUsers().then(({ data, error }) => {
+      if (!error) {
+        userCache.users = data?.users || [];
+        userCache.fetchedAt = Date.now();
+      }
+    }).catch(() => {});
+  }
+
+  if (userCache.users.length === 0) {
+    // Cold start — must fetch
+    const adminClient = supabaseAdmin || db;
+    const { data, error } = await adminClient.auth.admin.listUsers();
+    if (error) {
+      console.error('getCachedUsers: listUsers failed:', error.message);
+      return userCache.users;
+    }
+    userCache.users = data?.users || [];
+    userCache.fetchedAt = now;
+  }
+
   return userCache.users;
 }
 
@@ -76,6 +107,15 @@ router.get('/', async (req: Request, res: Response) => {
         expert_signup_at: p.expert_signup_at || authUser?.user_metadata?.expert_signup_at || null,
         expert_documents: p.expert_documents || authUser?.user_metadata?.expert_documents || null,
         expert_status: p.expert_status || authUser?.user_metadata?.expert_status || null,
+        institution: p.institution || authUser?.user_metadata?.institution || null,
+        graduation_year: p.graduation_year || authUser?.user_metadata?.graduation_year || null,
+        field_of_study: p.field_of_study || authUser?.user_metadata?.field_of_study || null,
+        software: p.software || authUser?.user_metadata?.software || null,
+        experience: p.experience || authUser?.user_metadata?.experience || null,
+        languages: p.languages || authUser?.user_metadata?.languages || null,
+        portfolio_url: p.portfolio_url || authUser?.user_metadata?.portfolio_url || null,
+        availability: p.availability || authUser?.user_metadata?.availability || null,
+        referral: p.referral || authUser?.user_metadata?.referral || null,
         created_at: p.created_at
       };
     });
@@ -144,7 +184,10 @@ router.post('/', async (req: Request, res: Response) => {
 // POST become-expert
 router.post('/become-expert', async (req: Request, res: Response) => {
   try {
+    const authHeader = req.headers.authorization;
+    console.log('[become-expert] Auth header present:', !!authHeader, 'starts with Bearer:', authHeader?.startsWith('Bearer ') || false);
     const requester = await getRequesterProfile(req);
+    console.log('[become-expert] Requester:', requester ? requester.email : 'NULL');
     if (!requester) return res.status(401).json({ error: 'Authentication required' });
 
     const email = safeString(req.body.email);
@@ -164,6 +207,15 @@ router.post('/become-expert', async (req: Request, res: Response) => {
     const proposal = safeString(req.body.proposal);
     const gpa = safeString(req.body.gpa);
     const documents = Array.isArray(req.body.documents) ? req.body.documents : [];
+    const institution = safeString(req.body.institution);
+    const graduationYear = safeString(req.body.graduation_year);
+    const fieldOfStudy = safeString(req.body.field_of_study);
+    const software = safeString(req.body.software);
+    const experience = safeString(req.body.experience);
+    const languages = safeString(req.body.languages);
+    const portfolioUrl = safeString(req.body.portfolio_url);
+    const availability = safeString(req.body.availability);
+    const referral = safeString(req.body.referral);
 
     const cachedList = await getCachedUsers();
     const existingUser = cachedList.find(u => u.id === userId);
@@ -180,6 +232,15 @@ router.post('/become-expert', async (req: Request, res: Response) => {
       expert_proposal: proposal,
       expert_signup_at: new Date().toISOString(),
       expert_documents: documents,
+      institution,
+      graduation_year: graduationYear,
+      field_of_study: fieldOfStudy,
+      software,
+      experience,
+      languages,
+      portfolio_url: portfolioUrl,
+      availability,
+      referral,
     };
 
     const { data, error } = await (supabaseAdmin || db).auth.admin.updateUserById(userId, {
@@ -204,6 +265,15 @@ router.post('/become-expert', async (req: Request, res: Response) => {
       expert_signup_at: new Date().toISOString(),
       expert_documents: documents,
       expert_status: 'pending',
+      institution,
+      graduation_year: graduationYear,
+      field_of_study: fieldOfStudy,
+      software,
+      experience,
+      languages,
+      portfolio_url: portfolioUrl,
+      availability,
+      referral,
     }, { onConflict: 'id' });
 
     invalidateUserCache();
@@ -225,6 +295,15 @@ router.post('/become-expert', async (req: Request, res: Response) => {
         expert_signup_at: data.user.user_metadata?.expert_signup_at,
         expert_documents: data.user.user_metadata?.expert_documents,
         expert_status: data.user.user_metadata?.expert_status,
+        institution: data.user.user_metadata?.institution,
+        graduation_year: data.user.user_metadata?.graduation_year,
+        field_of_study: data.user.user_metadata?.field_of_study,
+        software: data.user.user_metadata?.software,
+        experience: data.user.user_metadata?.experience,
+        languages: data.user.user_metadata?.languages,
+        portfolio_url: data.user.user_metadata?.portfolio_url,
+        availability: data.user.user_metadata?.availability,
+        referral: data.user.user_metadata?.referral,
         created_at: data.user.created_at
       },
     });
@@ -374,6 +453,35 @@ router.put('/:profileId/role', async (req: Request, res: Response) => {
   } catch (err) {
     console.error('PUT /api/profiles/:profileId/role exception:', err);
     res.status(500).json({ error: 'Internal server error during profile role update' });
+  }
+});
+
+// PUT update expert availability
+router.put('/:profileId/availability', async (req: Request, res: Response) => {
+  try {
+    const requester = await getRequesterProfile(req);
+    if (!requester) return res.status(401).json({ error: 'Authentication required' });
+
+    const targetProfileId = safeString(req.params.profileId);
+    if (requester.id !== targetProfileId && requester.role !== 'admin') {
+      return res.status(403).json({ error: 'Access denied: you can only update your own availability' });
+    }
+
+    // Boolean("false") === true — handle string values from form submissions
+    const raw = req.body.is_available;
+    const isAvailable = raw === true || raw === 'true' || raw === 1 || raw === '1';
+
+    const { error } = await db
+      .from('profiles')
+      .update({ is_available: isAvailable, last_active_at: new Date().toISOString() })
+      .eq('id', targetProfileId);
+
+    if (error) return res.status(500).json({ error: 'Failed to update availability' });
+
+    res.json({ success: true, is_available: isAvailable });
+  } catch (err) {
+    console.error('PUT /api/profiles/:profileId/availability exception:', err);
+    res.status(500).json({ error: 'Internal server error during availability update' });
   }
 });
 

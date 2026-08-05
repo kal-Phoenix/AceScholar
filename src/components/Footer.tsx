@@ -9,18 +9,16 @@ interface FooterProps {
 export default function Footer({ setCurrentPage }: FooterProps) {
   const handleNavClick = (page: PageType) => {
     setCurrentPage(page);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const scrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const currentYear = new Date().getFullYear();
 
   return (
     <footer className="bg-[#0A0F1E] border-t border-slate-800/40 text-slate-400 font-sans">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 md:py-14">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10 lg:gap-14">
           
           {/* Logo & Tagline */}
@@ -42,7 +40,7 @@ export default function Footer({ setCurrentPage }: FooterProps) {
               </span>
             </div>
             <p className="text-sm max-w-xs text-slate-400 leading-relaxed">
-              Elite global academic consultancy providing top-tier support for research writing, coding projects, CAD drafting, and mathematical solutions.
+              Academic and technical support for research writing, coding, engineering drawings, and data work — done by real graduate experts.
             </p>
             <div className="flex items-center space-x-2.5 glass rounded-xl p-3.5 max-w-xs">
               <ShieldAlert className="h-4 w-4 text-amber-500 shrink-0" />
@@ -53,7 +51,7 @@ export default function Footer({ setCurrentPage }: FooterProps) {
           {/* Services Links */}
           <div className="space-y-5">
             <h4 className="text-sm font-bold text-white uppercase tracking-wider">Services</h4>
-            <ul className="space-y-3 text-sm">
+            <ul className="space-y-3">
               {[
                 { label: 'Academic Writing', page: 'services' as PageType },
                 { label: 'Coding Projects', page: 'services' as PageType },
@@ -65,7 +63,7 @@ export default function Footer({ setCurrentPage }: FooterProps) {
                 <li key={item.label}>
                   <button
                     onClick={() => handleNavClick(item.page)}
-                    className="hover:text-amber-500 hover:translate-x-1 transition-all duration-200 cursor-pointer text-left focus:outline-none text-xs"
+                    className="hover:text-amber-500 hover:translate-x-1 transition-all duration-200 cursor-pointer text-left focus:outline-none text-sm"
                   >
                     {item.label}
                   </button>
@@ -77,7 +75,7 @@ export default function Footer({ setCurrentPage }: FooterProps) {
           {/* Company Links */}
           <div className="space-y-5">
             <h4 className="text-sm font-bold text-white uppercase tracking-wider">Company</h4>
-            <ul className="space-y-3 text-sm">
+            <ul className="space-y-3">
               {[
                 { label: 'About Us', page: 'about' as PageType },
                 { label: 'Portfolio', page: 'portfolio' as PageType },
@@ -87,7 +85,7 @@ export default function Footer({ setCurrentPage }: FooterProps) {
                 <li key={item.label}>
                   <button
                     onClick={() => handleNavClick(item.page)}
-                    className="hover:text-amber-500 hover:translate-x-1 transition-all duration-200 cursor-pointer text-left focus:outline-none text-xs"
+                    className="hover:text-amber-500 hover:translate-x-1 transition-all duration-200 cursor-pointer text-left focus:outline-none text-sm"
                   >
                     {item.label}
                   </button>
@@ -99,28 +97,28 @@ export default function Footer({ setCurrentPage }: FooterProps) {
           {/* Guarantees & Contact */}
           <div className="space-y-5">
             <h4 className="text-sm font-bold text-white uppercase tracking-wider">Guarantees</h4>
-            <ul className="space-y-3 text-sm">
-              <li className="flex items-center space-x-2.5 text-xs">
-                <CheckCircle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+            <ul className="space-y-3">
+              <li className="flex items-center space-x-2.5 text-sm">
+                <CheckCircle className="h-4 w-4 text-amber-500 shrink-0" />
                 <span>On-time Delivery</span>
               </li>
-              <li className="flex items-center space-x-2.5 text-xs">
-                <CheckCircle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+              <li className="flex items-center space-x-2.5 text-sm">
+                <CheckCircle className="h-4 w-4 text-amber-500 shrink-0" />
                 <span>Free Unlimited Revisions</span>
               </li>
-              <li className="flex items-center space-x-2.5 text-xs">
-                <CheckCircle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+              <li className="flex items-center space-x-2.5 text-sm">
+                <CheckCircle className="h-4 w-4 text-amber-500 shrink-0" />
                 <span>Plagiarism-free Originality</span>
               </li>
-              <li className="flex items-center space-x-2.5 text-xs">
-                <CheckCircle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+              <li className="flex items-center space-x-2.5 text-sm">
+                <CheckCircle className="h-4 w-4 text-amber-500 shrink-0" />
                 <span>24/7 Support Available</span>
               </li>
             </ul>
             <div className="pt-3 space-y-2.5">
-              <a href="mailto:contact@acescholar.com" className="flex items-center space-x-2 text-xs text-slate-300 hover:text-amber-500 transition-colors duration-200">
-                <Mail className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                <span>contact@acescholar.com</span>
+              <a href={`mailto:${import.meta.env.VITE_CONTACT_EMAIL || 'contact@acescholar.com'}`} className="flex items-center space-x-2 text-sm text-slate-300 hover:text-amber-500 transition-colors duration-200">
+                <Mail className="h-4 w-4 text-amber-500 shrink-0" />
+                <span>{import.meta.env.VITE_CONTACT_EMAIL || 'contact@acescholar.com'}</span>
               </a>
             </div>
           </div>
@@ -128,11 +126,11 @@ export default function Footer({ setCurrentPage }: FooterProps) {
         </div>
 
         {/* Footer Bottom */}
-        <div className="border-t border-slate-800/40 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center text-xs text-slate-500 space-y-4 md:space-y-0">
+        <div className="border-t border-slate-800/40 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center text-sm text-slate-500 space-y-4 md:space-y-0">
           <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4">
             <span>&copy; {currentYear} AceScholar. All rights reserved.</span>
             <span className="hidden sm:inline text-slate-700">|</span>
-            <span>Ethiopia Office serving clients worldwide 24/7</span>
+            <span>Ethiopia · Serving clients worldwide</span>
           </div>
           <div className="flex items-center gap-5">
             <button

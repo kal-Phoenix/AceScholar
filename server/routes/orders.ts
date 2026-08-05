@@ -1,11 +1,11 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
-import { db } from '../lib/supabase.js';
+import { db, supabase, supabaseAdmin } from '../lib/supabase.js';
 import {
   InputError, MAX_LENGTHS, ALLOWED_ORDER_STATUSES, ALLOWED_PAYMENT_STATUSES, ALLOWED_PAYMENT_METHODS,
   requireText, requireEmail, optionalText, safeString, requireIdParam, enforceBodyLimit, sanitizeText
 } from '../lib/validation.js';
-import { isOrderAccessibleToExpert, getRequesterProfile } from '../lib/utils.js';
+import { isOrderAccessibleToExpert, getRequesterProfile, generatePaymentId, getAdminCutPercent } from '../lib/utils.js';
 import { getCachedUsers } from './profiles.js';
 
 const router = Router();
@@ -22,6 +22,10 @@ const WRITABLE_COLUMNS = [
   'agreed_price', 'preview_url', 'preview_name', 'payment_awaiting',
   'payment_method_type', 'crypto_discount_applied', 'delivery_released',
   'expert_submission_url', 'expert_submission_name', 'admin_screenshots',
+  // Revision & dispute fields
+  'revision_deadline', 'revision_count', 'max_revisions',
+  'dispute_status', 'dispute_reason', 'dispute_created_at',
+  'dispute_resolved_at', 'dispute_resolution',
 ];
 
 /** Build a DB-safe record from input, only including known columns. */
@@ -83,18 +87,33 @@ router.get('/', async (req: Request, res: Response) => {
       return res.json({ data: data || [], total: count || 0, page, limit });
     }
 
-    // Expert: fetch all and filter in JS (fuzzy matching)
-    const { data, error } = await db
+    // Expert: fetch only unallocated orders + orders assigned to them
+    // Use DB-level filtering to avoid fetching all orders
+    const expertName = requester.full_name;
+    const { data: unallocated, error: err1 } = await db
       .from('orders')
       .select('*')
+      .or('assigned_to.is.null,assigned_to.eq.,assigned_to.eq.Unallocated')
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('GET /api/orders error:', error.message);
+    const { data: assigned, error: err2 } = await db
+      .from('orders')
+      .select('*')
+      .eq('assigned_to', expertName)
+      .order('created_at', { ascending: false });
+
+    if (err1 || err2) {
+      console.error('GET /api/orders error:', err1?.message || err2?.message);
       return res.status(500).json({ error: 'Failed to fetch orders' });
     }
 
-    const allOrders = data || [];
+    // Combine and deduplicate
+    const allOrdersMap = new Map<string, any>();
+    for (const o of [...(unallocated || []), ...(assigned || [])]) {
+      allOrdersMap.set(o.id, o);
+    }
+    const allOrders = Array.from(allOrdersMap.values());
+
     const filtered = allOrders.filter((o: any) =>
       isOrderAccessibleToExpert(o, requester.email, requester.full_name)
     );
@@ -139,6 +158,9 @@ router.get('/:orderId', async (req: Request, res: Response) => {
 // POST new order
 router.post('/', enforceBodyLimit(5 * 1024 * 1024), async (req: Request, res: Response) => {
   try {
+    const requester = await getRequesterProfile(req);
+    if (!requester) return res.status(401).json({ error: 'Authentication required' });
+
     let client_email: string, client_name: string;
     try {
       client_email = requireEmail(req.body.client_email);
@@ -146,6 +168,11 @@ router.post('/', enforceBodyLimit(5 * 1024 * 1024), async (req: Request, res: Re
     } catch (e: any) {
       if (e instanceof InputError) return res.status(400).json({ error: e.message });
       throw e;
+    }
+
+    // Ensure the authenticated user is creating their own order
+    if (requester.role !== 'admin' && client_email.toLowerCase() !== requester.email.toLowerCase()) {
+      return res.status(403).json({ error: 'You can only create orders for your own email' });
     }
 
     const authUsers = await getCachedUsers();
@@ -213,6 +240,26 @@ router.post('/', enforceBodyLimit(5 * 1024 * 1024), async (req: Request, res: Re
       }
     }
 
+    // Notify admins of new order
+    try {
+      const { data: admins } = await db.from('profiles').select('email').eq('role', 'admin');
+      if (admins && admins.length > 0) {
+        const notifications = admins.map((a: any) => ({
+          id: crypto.randomUUID(),
+          user_email: a.email,
+          type: 'new_order',
+          title: 'New Order Received',
+          message: `New order ${orderId} from ${client_name} (${client_email}) - ${dbRecord.service_type}`,
+          read: false,
+          link: orderId,
+          created_at: new Date().toISOString(),
+        }));
+        await db.from('notifications').insert(notifications);
+      }
+    } catch (e) {
+      console.error('Failed to notify admins of new order:', e);
+    }
+
     res.status(201).json(dbRecord);
   } catch (err) {
     console.error('POST /api/orders exception:', err);
@@ -267,12 +314,16 @@ router.put('/:orderId', async (req: Request, res: Response) => {
     } else if (requester.role === 'expert') {
       const EXPERT_ALLOWED_FIELDS = [
         'status', 'assigned_to', 'expert_accepted', 'delivery_url', 'delivery_name',
-        'expert_submission_url', 'expert_submission_name', 'description', 'internal_notes',
+        'expert_submission_url', 'expert_submission_name', 'description',
       ];
       for (const key of Object.keys(dbRecord)) {
         if (!EXPERT_ALLOWED_FIELDS.includes(key)) {
           delete dbRecord[key];
         }
+      }
+      // Experts can only signal completion via 'under_review' — only admin can set 'delivered'
+      if (dbRecord.status && dbRecord.status === 'delivered') {
+        return res.status(403).json({ error: 'Experts cannot mark an order as delivered. Submit for review and an admin will release the delivery.' });
       }
     }
 
@@ -284,6 +335,86 @@ router.put('/:orderId', async (req: Request, res: Response) => {
       return res.status(500).json({ error: 'Failed to update order' });
     }
     if (!data) return res.status(404).json({ error: 'Order not found' });
+
+    // Create notifications for key status changes
+    const createNotification = async (userEmail: string, type: string, title: string, message: string) => {
+      try {
+        await db.from('notifications').insert({
+          id: crypto.randomUUID(),
+          user_email: userEmail,
+          type,
+          title,
+          message,
+          read: false,
+          link: orderId,
+          created_at: new Date().toISOString(),
+        });
+      } catch (e) {
+        console.error('Failed to create notification:', e);
+      }
+    };
+
+    // Notify on status changes
+    if (dbRecord.status && dbRecord.status !== currentOrderData.status) {
+      const order = currentOrderData as any;
+      if (dbRecord.status === 'in_progress' && order.assigned_to) {
+        await createNotification(order.client_email, 'order_update', 'Order In Progress', `Your order ${orderId} is now being worked on by ${order.assigned_to}.`);
+      } else if (dbRecord.status === 'delivered') {
+        await createNotification(order.client_email, 'order_delivered', 'Order Delivered', `Your order ${orderId} has been delivered. Please review and download.`);
+      } else if (dbRecord.status === 'revision_requested') {
+        await createNotification(order.client_email, 'order_update', 'Revision Requested', `A revision has been requested for order ${orderId}.`);
+      } else if (dbRecord.status === 'under_review') {
+        await createNotification(order.client_email, 'order_update', 'Under Quality Review', `Your order ${orderId} is undergoing quality review.`);
+      }
+    }
+
+    // Notify on expert assignment
+    if (dbRecord.assigned_to && dbRecord.assigned_to !== currentOrderData.assigned_to) {
+      const order = currentOrderData as any;
+      await createNotification(order.client_email, 'expert_assigned', 'Expert Assigned', `Expert ${dbRecord.assigned_to} has been assigned to your order ${orderId}.`);
+    }
+
+    // Auto-create payment record when payment_status changes to 'approved'
+    // This ensures expert earnings are recorded for Pay Upon Delivery orders
+    if (dbRecord.payment_status === 'approved' && currentOrderData.payment_status !== 'approved') {
+      const order = currentOrderData as any;
+      const amount = order.agreed_price ?? order.total_amount ?? 0;
+      const currency = order.currency || 'USD';
+      if (amount > 0) {
+        const adminCutPercent = getAdminCutPercent();
+        const admin_cut = Number((amount * adminCutPercent / 100).toFixed(2));
+        const expert_amount = Number((amount * (100 - adminCutPercent) / 100).toFixed(2));
+        const payId = generatePaymentId();
+        const paymentRecord = {
+          id: payId,
+          order_id: orderId,
+          provider_id: order.payment_method_type || order.payment_method || 'MANUAL',
+          amount,
+          admin_cut,
+          expert_amount,
+          currency,
+          status: 'approved',
+          reference_id: `AUTO-APPROVED-${crypto.randomUUID().replace(/-/g, '').substring(0, 12)}`,
+          phone_number: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        const { error: insertErr } = await db.from('payments')
+          .insert([paymentRecord])
+          .select()
+          .maybeSingle()
+          .then(r => {
+            // INSERT ON CONFLICT equivalent — if a payment for this order already exists, skip
+            if (r.error?.message?.includes('duplicate') || r.error?.code === '23505') {
+              return { error: null };
+            }
+            return r;
+          });
+        if (insertErr) {
+          console.error('Failed to auto-create payment record:', insertErr.message);
+        }
+      }
+    }
 
     res.json(data);
   } catch (err) {
@@ -304,10 +435,11 @@ router.post('/:orderId/apply', async (req: Request, res: Response) => {
     try { orderId = requireIdParam(req.params.orderId, 'Order ID'); }
     catch (e: any) { if (e instanceof InputError) return res.status(400).json({ error: e.message }); throw e; }
 
-    const expert_email = safeString(req.body.expert_email);
-    const expert_name = safeString(req.body.expert_name);
-    if (!expert_email || !expert_name) {
-      return res.status(400).json({ error: 'expert_email and expert_name are required' });
+    // Derive expert identity from auth token, not from request body (prevents spoofing)
+    const expert_email = requester.email.toLowerCase();
+    const expert_name = (requester.full_name || '').slice(0, MAX_LENGTHS.name);
+    if (!expert_email) {
+      return res.status(400).json({ error: 'Expert email not found in auth token' });
     }
 
     const { data: order, error: fetchErr } = await db
@@ -315,34 +447,38 @@ router.post('/:orderId/apply', async (req: Request, res: Response) => {
     if (fetchErr) return res.status(500).json({ error: 'Failed to fetch order' });
     if (!order) return res.status(404).json({ error: 'Order not found' });
 
-    // Check if already assigned
-    if (order.assigned_to && order.assigned_to.trim() && order.assigned_to !== 'Unallocated') {
-      return res.status(409).json({ error: 'This order is already assigned to another expert' });
-    }
-
-    // Check if already applied
-    const applicants = Array.isArray(order.applicants) ? order.applicants : [];
-    const alreadyApplied = applicants.some((a: any) =>
-      a.expert_email?.toLowerCase() === expert_email.toLowerCase()
-    );
-    if (alreadyApplied) {
-      return res.status(409).json({ error: 'You have already applied to this order' });
-    }
-
-    // Add application
     const newApplicant = {
       expert_email,
       expert_name,
       applied_at: new Date().toISOString(),
       status: 'pending',
     };
-    const updatedApplicants = [...applicants, newApplicant];
 
-    const { error: updateErr } = await db
-      .from('orders').update({ applicants: updatedApplicants }).eq('id', orderId);
-    if (updateErr) return res.status(500).json({ error: 'Failed to submit application' });
+    // Retry loop to prevent TOCTOU race condition — on conflict, re-read and retry
+    const MAX_RETRIES = 3;
+    let lastError = 'Failed to submit application';
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      const { data: freshOrder, error: freshErr } = await db
+        .from('orders').select('applicants, assigned_to').eq('id', orderId).maybeSingle();
+      if (freshErr || !freshOrder) { lastError = 'Failed to submit application'; continue; }
 
-    res.json({ success: true, applicants: updatedApplicants });
+      const freshApplicants = Array.isArray(freshOrder.applicants) ? freshOrder.applicants : [];
+      if (freshApplicants.some((a: any) => a.expert_email?.toLowerCase() === expert_email)) {
+        return res.status(409).json({ error: 'You have already applied to this order' });
+      }
+      if (freshOrder.assigned_to && freshOrder.assigned_to.trim() && freshOrder.assigned_to !== 'Unallocated') {
+        return res.status(409).json({ error: 'This order was just assigned to another expert' });
+      }
+
+      const updatedApplicants = [...freshApplicants, newApplicant];
+      const { error: finalErr } = await db
+        .from('orders').update({ applicants: updatedApplicants }).eq('id', orderId);
+      if (!finalErr) {
+        return res.json({ success: true, applicants: updatedApplicants });
+      }
+      lastError = 'Failed to submit application (concurrent conflict, retrying)';
+    }
+    return res.status(500).json({ error: lastError });
   } catch (err) {
     console.error('POST /api/orders/:orderId/apply exception:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -386,6 +522,22 @@ router.post('/:orderId/approve-expert', async (req: Request, res: Response) => {
         status: 'in_progress',
       }).eq('id', orderId);
     if (updateErr) return res.status(500).json({ error: 'Failed to approve expert' });
+
+    // Update profiles table role to 'expert' so getRequesterProfile resolves correctly
+    try {
+      const { data: expertProfile } = await db
+        .from('profiles').select('id').eq('email', expert_email.toLowerCase().trim()).maybeSingle();
+      if (expertProfile?.id) {
+        await db.from('profiles').update({ role: 'expert' }).eq('id', expertProfile.id);
+        // Also update JWT user_metadata so the next getUser call returns expert role
+        // Must use supabaseAdmin (service-role) — anon client does not have admin privileges
+        await (supabaseAdmin || supabase).auth.admin.updateUserById(expertProfile.id, {
+          user_metadata: { role: 'expert' },
+        });
+      }
+    } catch (metaErr) {
+      console.error('Warning: failed to update expert profile/metadata:', metaErr);
+    }
 
     res.json({ success: true });
   } catch (err) {
