@@ -5,8 +5,7 @@ import {
   InputError, MAX_LENGTHS, ALLOWED_ORDER_STATUSES, ALLOWED_PAYMENT_STATUSES, ALLOWED_PAYMENT_METHODS,
   requireText, requireEmail, optionalText, safeString, requireIdParam, enforceBodyLimit, sanitizeText
 } from '../lib/validation.js';
-import { isOrderAccessibleToExpert, getRequesterProfile, generatePaymentId, getAdminCutPercent } from '../lib/utils.js';
-import { getCachedUsers } from './profiles.js';
+import { isOrderAccessibleToExpert, getRequesterProfile, generatePaymentId, getAdminCutPercent, parseDeadline } from '../lib/utils.js';
 
 const router = Router();
 
@@ -175,9 +174,23 @@ router.post('/', enforceBodyLimit(5 * 1024 * 1024), async (req: Request, res: Re
       return res.status(403).json({ error: 'You can only create orders for your own email' });
     }
 
-    const authUsers = await getCachedUsers();
-    const clientAuthUser = authUsers?.find((u: any) => u.email?.toLowerCase() === client_email.toLowerCase());
-    const client_id = clientAuthUser?.id || null;
+    let client_id: string | null = null;
+    if (requester.email.toLowerCase() === client_email.toLowerCase()) {
+      client_id = requester.id;
+    } else {
+      try {
+        const { data: clientProfile } = await db
+          .from('profiles')
+          .select('id')
+          .eq('email', client_email.toLowerCase())
+          .maybeSingle();
+        if (clientProfile?.id) {
+          client_id = clientProfile.id;
+        }
+      } catch (e) {
+        console.error('Failed to resolve client_id:', e);
+      }
+    }
 
     const orderId = optionalText(req.body.id, MAX_LENGTHS.id).replace(/[^a-zA-Z0-9_\-]/g, '') || 'ord-' + crypto.randomUUID().replace(/-/g, '').substring(0, 12);
 
@@ -189,7 +202,7 @@ router.post('/', enforceBodyLimit(5 * 1024 * 1024), async (req: Request, res: Re
       service_type: optionalText(req.body.service_type, MAX_LENGTHS.service_type, 'General / Unspecified'),
       subject: optionalText(req.body.subject, MAX_LENGTHS.subject, 'General / Unspecified'),
       academic_level: optionalText(req.body.academic_level, MAX_LENGTHS.general, 'Undergraduate'),
-      deadline: optionalText(req.body.deadline, 60),
+      deadline: parseDeadline(req.body.deadline) || new Date(Date.now() + 3 * 86400 * 1000).toISOString(),
       description: optionalText(req.body.description, MAX_LENGTHS.description),
       special_instructions: req.body.special_instructions
         ? optionalText(req.body.special_instructions, MAX_LENGTHS.instructions) || null
@@ -234,31 +247,30 @@ router.post('/', enforceBodyLimit(5 * 1024 * 1024), async (req: Request, res: Re
       console.error('POST /api/orders insert error:', error.message);
       if (error.message?.toLowerCase().includes('client_id') || error.message?.toLowerCase().includes('foreign key')) {
         const { error: retryErr } = await db.from('orders').insert([{ ...dbRecord, client_id: null }]);
-        if (retryErr) return res.status(500).json({ error: 'Failed to create order' });
+        if (retryErr) return res.status(500).json({ error: 'Failed to create order: ' + retryErr.message });
       } else {
-        return res.status(500).json({ error: 'Failed to create order' });
+        return res.status(500).json({ error: 'Failed to create order: ' + error.message });
       }
     }
 
-    // Notify admins of new order
-    try {
-      const { data: admins } = await db.from('profiles').select('email').eq('role', 'admin');
-      if (admins && admins.length > 0) {
-        const notifications = admins.map((a: any) => ({
-          id: crypto.randomUUID(),
-          user_email: a.email,
-          type: 'new_order',
-          title: 'New Order Received',
-          message: `New order ${orderId} from ${client_name} (${client_email}) - ${dbRecord.service_type}`,
-          read: false,
-          link: orderId,
-          created_at: new Date().toISOString(),
-        }));
-        await db.from('notifications').insert(notifications);
-      }
-    } catch (e) {
-      console.error('Failed to notify admins of new order:', e);
-    }
+    // Notify admins of new order (fire-and-forget, don't block response)
+    Promise.resolve().then(() =>
+      db.from('profiles').select('email').eq('role', 'admin').then(({ data: admins }) => {
+        if (admins && admins.length > 0) {
+          const notifications = admins.map((a: any) => ({
+            id: crypto.randomUUID(),
+            user_email: a.email,
+            type: 'new_order',
+            title: 'New Order Received',
+            message: `New order ${orderId} from ${client_name} (${client_email}) - ${dbRecord.service_type}`,
+            read: false,
+            link: orderId,
+            created_at: new Date().toISOString(),
+          }));
+          return db.from('notifications').insert(notifications).then(() => {});
+        }
+      })
+    ).catch((e: any) => console.error('Failed to notify admins of new order:', e));
 
     res.status(201).json(dbRecord);
   } catch (err) {

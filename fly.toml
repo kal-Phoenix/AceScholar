@@ -1,16 +1,79 @@
-# fly.toml app configuration file generated for acescholar on 2026-07-18T02:12:15+03:00
-#
-# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
-#
-
 app = 'acescholar'
 primary_region = 'iad'
 
+[env]
+  PORT = "3000"
+  NODE_ENV = "production"
+  ALLOWED_ORIGIN = "https://acescholar.fly.dev"
+  VITE_SUPABASE_URL = "https://knrkywdpjhxcnhevwyad.supabase.co"
+  VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtucmt5d2Rwamh4Y25oZXZ3eWFkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyNTIxMzcsImV4cCI6MjA5ODgyODEzN30.GgHTJSxW5aiKDvD8NgcDw9P-bGLogi9Df-qlMX5wU3M"
+  ADMIN_EMAIL = "kaleabnt369@gmail.com"
+  ADMIN_CUT_PERCENT = "10"
+  CBE_ACCOUNT_NUMBER = "1000595818706"
+  CBE_ACCOUNT_NAME = "Kaleab Dereje"
+  TELEBIRR_NUMBER = "0965588294"
+  TELEBIRR_NAME = "Kaleab Dereje"
+  BOA_ACCOUNT_NUMBER = "230776148"
+  BOA_ACCOUNT_NAME = "Kaleab Dereje"
+  USDT_ERC20_ADDRESS = "0x07b4ab427ebc9ed6cdb3af72ae052853a4437bc0"
+  USDT_TRC20_ADDRESS = "TBBP83gJVVZjGRtzZm45FwmiJ5XnCpiAGs"
+  USDT_BEP20_ADDRESS = "0x07b4ab427ebc9ed6cdb3af72ae052853a4437bc0"
+  BTC_ADDRESS = "12GuF9JVLzQrfgvNjLXhAkebSN7552ViMm"
+  CRYPTO_DISCOUNT_PERCENT = "10"
+  CARD_NAME = "Credit / Debit Card"
+  BYBIT_CARD_NUMBER = "4938755438052696"
+  BYBIT_CARD_HOLDER_NAME = "Kaleab Dereje"
+
 [build]
+  [build.args]
+    VITE_SUPABASE_URL = "https://knrkywdpjhxcnhevwyad.supabase.co"
+    VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtucmt5d2Rwamh4Y25oZXZ3eWFkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyNTIxMzcsImV4cCI6MjA5ODgyODEzN30.GgHTJSxW5aiKDvD8NgcDw9P-bGLogi9Df-qlMX5wU3M"
+    VITE_CONTACT_EMAIL = "ace.support1@gmail.com"
+    VITE_DESK_EMAIL = "ace.support1@gmail.com"
+    VITE_WHATSAPP_NUMBER = "251988238675"
+    VITE_OFFICE_LOCATION = "Addis Ababa, Ethiopia"
+    VITE_BASE_PRICE_USD = "15"
+    VITE_BASE_PRICE_ETB = "500"
+    VITE_STAT_PROJECTS = "2500"
+    VITE_STAT_DELIVERY = "98"
+    VITE_STAT_RATING = "49"
+    VITE_STAT_COUNTRIES = "50"
+    VITE_EXCHANGE_RATES = "{\"ETB\":{\"symbol\":\"Br\",\"rate\":120},\"GBP\":{\"symbol\":\"£\",\"rate\":0.79},\"EUR\":{\"symbol\":\"€\",\"rate\":0.92},\"CAD\":{\"symbol\":\"C$\",\"rate\":1.36},\"AUD\":{\"symbol\":\"A$\",\"rate\":1.51},\"AED\":{\"symbol\":\"AED \",\"rate\":3.67},\"SAR\":{\"symbol\":\"SR \",\"rate\":3.75}}"
+    VITE_PRICE_WRITING_BASIC = "$20–$40"
+    VITE_PRICE_WRITING_STANDARD = "$40–$80"
+    VITE_PRICE_WRITING_PREMIUM = "$80–$200+"
+    VITE_PRICE_CODING_BASIC = "$20–$40"
+    VITE_PRICE_CODING_STANDARD = "$50–$100"
+    VITE_PRICE_CODING_PREMIUM = "$100–$300+"
+    VITE_PRICE_ENGINEERING_BASIC = "$20–$40"
+    VITE_PRICE_ENGINEERING_STANDARD = "$50–$100"
+    VITE_PRICE_ENGINEERING_PREMIUM = "$100–$250+"
+    VITE_PRICE_DATA_BASIC = "$20–$35"
+    VITE_PRICE_DATA_STANDARD = "$40–$80"
+    VITE_PRICE_DATA_PREMIUM = "$80–$200+"
+    VITE_PRICE_STEM_BASIC = "$15–$30"
+    VITE_PRICE_STEM_STANDARD = "$30–$60"
+    VITE_PRICE_STEM_PREMIUM = "$60–$120+"
+    VITE_PRICE_ETB_WRITING_BASIC = "500–1,500 Br"
+    VITE_PRICE_ETB_WRITING_STANDARD = "1,500–3,000 Br"
+    VITE_PRICE_ETB_WRITING_PREMIUM = "3,000–8,000+ Br"
+    VITE_PRICE_ETB_CODING_BASIC = "500–1,500 Br"
+    VITE_PRICE_ETB_CODING_STANDARD = "2,000–4,000 Br"
+    VITE_PRICE_ETB_CODING_PREMIUM = "4,000–12,000+ Br"
+    VITE_PRICE_ETB_ENGINEERING_BASIC = "500–1,500 Br"
+    VITE_PRICE_ETB_ENGINEERING_STANDARD = "2,000–4,000 Br"
+    VITE_PRICE_ETB_ENGINEERING_PREMIUM = "4,000–10,000+ Br"
+    VITE_PRICE_ETB_DATA_BASIC = "500–1,200 Br"
+    VITE_PRICE_ETB_DATA_STANDARD = "1,500–3,000 Br"
+    VITE_PRICE_ETB_DATA_PREMIUM = "3,000–8,000+ Br"
+    VITE_PRICE_ETB_STEM_BASIC = "300–1,000 Br"
+    VITE_PRICE_ETB_STEM_STANDARD = "1,000–2,500 Br"
+    VITE_PRICE_ETB_STEM_PREMIUM = "2,500–5,000+ Br"
+
 [http_service]
   internal_port = 3000
   force_https = true
-  auto_stop_machines = 'stop'
+  auto_stop_machines = 'off'
   auto_start_machines = true
   min_machines_running = 1
 
@@ -20,7 +83,7 @@ primary_region = 'iad'
     soft_limit = 20
 
 [[vm]]
-  memory = '512mb'
+  memory = '1024mb'
   cpu_kind = 'shared'
   cpus = 1
-  memory_mb = 512
+  memory_mb = 1024

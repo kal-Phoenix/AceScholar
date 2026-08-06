@@ -9,7 +9,7 @@ import { PageType, Profile, Order as AcademicOrder, Message, Payment, Withdrawal
 import { fallbackDb, getAuthHeaders } from '../lib/supabase';
 import {
   MAX_FILE_SIZE_BYTES, POLLING_INTERVAL_MS, HOURS_DIVISOR,
-  DEFAULT_EXCHANGE_RATES, LOCAL_STORAGE_USER_KEY,
+  DEFAULT_EXCHANGE_RATES,
 } from '../lib/constants';
 import NotificationBell from './NotificationBell';
 
@@ -551,7 +551,6 @@ export default function Expert({ user, setCurrentPage, showToast, setUser, detec
                 if (res.ok) {
                   const updatedUser = { ...user, is_available: newAvailability };
                   if (setUser) setUser(updatedUser);
-                  localStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(updatedUser));
                   if (showToast) showToast(
                     newAvailability ? 'You are now online and available for orders' : 'You are now offline',
                     'success'

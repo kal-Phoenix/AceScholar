@@ -14,3 +14,5 @@ coverage/
 *.pfx
 error.txt
 output.txt
+
+.vercel

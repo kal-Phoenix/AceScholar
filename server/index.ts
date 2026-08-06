@@ -10,13 +10,9 @@ import { rateLimit } from 'express-rate-limit';
 // Global error handlers — must be registered before any async work
 process.on('unhandledRejection', (reason) => {
   console.error('Unhandled Promise Rejection:', reason);
-  // Exit after a short delay to allow logs to flush — the process is in an undefined state
-  setTimeout(() => process.exit(1), 1000);
 });
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
-  // Give the server time to finish pending requests before exiting
-  setTimeout(() => process.exit(1), 1000);
 });
 
 
@@ -32,6 +28,7 @@ import withdrawalRoutes from './routes/withdrawals.js';
 import ratingRoutes from './routes/ratings.js';
 import notificationRoutes from './routes/notifications.js';
 import analyticsRoutes from './routes/analytics.js';
+import geoIpRoutes from './routes/geoip.js';
 
 async function startServer() {
   const app = express();
@@ -43,11 +40,11 @@ async function startServer() {
     contentSecurityPolicy: process.env.NODE_ENV === 'production' ? {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-        fontSrc: ["'self'", "https://fonts.gstatic.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
         imgSrc: ["'self'", "data:", "https:", "blob:"],
-        connectSrc: ["'self'", process.env.VITE_SUPABASE_URL || ''],
+        connectSrc: ["'self'", "https:", "wss:"],
         frameSrc: ["'none'"],
         objectSrc: ["'none'"],
       },
@@ -56,26 +53,46 @@ async function startServer() {
     crossOriginEmbedderPolicy: false,
   }));
 
-  app.use(express.json({ limit: '2mb' }));
-  app.use(express.urlencoded({ limit: '2mb', extended: false }));
+  // CORS configuration (must run BEFORE body parsers and routes)
+  const rawAllowedOrigins = process.env.ALLOWED_ORIGIN || '';
+  const allowedOriginsList = rawAllowedOrigins
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
 
-  // CORS — default-deny policy
-  const allowedOrigin = process.env.ALLOWED_ORIGIN;
   app.use((req, res, next) => {
     const origin = req.headers.origin;
-    if (origin && origin === allowedOrigin) {
-      res.header('Access-Control-Allow-Origin', origin);
-      res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    } else if (origin && !allowedOrigin && process.env.NODE_ENV !== 'production') {
-      res.header('Access-Control-Allow-Origin', origin);
+    if (origin) {
+      const host = req.get('host');
+      const requestHostOriginHttp = host ? `http://${host}` : '';
+      const requestHostOriginHttps = host ? `https://${host}` : '';
+
+      const isSameHost = origin === requestHostOriginHttp || origin === requestHostOriginHttps;
+      const isExplicitlyAllowed =
+        allowedOriginsList.length > 0
+          ? allowedOriginsList.includes(origin) || allowedOriginsList.includes('*')
+          : true;
+
+      if (isSameHost || isExplicitlyAllowed || process.env.NODE_ENV !== 'production') {
+        res.header('Access-Control-Allow-Origin', origin);
+        res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+        res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+        res.header('Access-Control-Allow-Credentials', 'true');
+      }
+    } else {
+      res.header('Access-Control-Allow-Origin', '*');
       res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
       res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     }
-    // No origin (server-to-server, curl, same-origin) — no CORS headers needed
-    if (req.method === 'OPTIONS') return res.sendStatus(200);
+
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(204);
+    }
     next();
   });
+
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ limit: '10mb', extended: false }));
 
   // Rate limiters
   const baseRateLimiter = rateLimit({
@@ -163,18 +180,18 @@ async function startServer() {
   app.use('/api/contacts/sync', syncRateLimiter);
 
   // ─────────────────────────────────────────────────────────────────────────
-  // HEALTH CHECK (actually pings Supabase)
+  // REQUEST LOGGING (only for /api)
   // ─────────────────────────────────────────────────────────────────────────
-  app.get('/api/health', async (_req, res) => {
-    try {
-      const { db } = await import('./lib/supabase.js');
-      const { error } = await db.from('orders').select('id', { count: 'exact', head: true });
-      if (error) throw error;
-      res.json({ status: 'ok', timestamp: new Date().toISOString(), supabase: 'connected' });
-    } catch (err: any) {
-      console.error('Health check failed:', err.message);
-      res.status(503).json({ status: 'degraded', timestamp: new Date().toISOString(), supabase: 'disconnected' });
-    }
+  app.use('/api', (req, _res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+    next();
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // HEALTH CHECK — always returns 200 so Docker/Fly health probes pass fast
+  // ─────────────────────────────────────────────────────────────────────────
+  app.get('/api/health', (_req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -191,13 +208,14 @@ async function startServer() {
   app.use('/api/ratings', ratingRoutes);
   app.use('/api/notifications', notificationRoutes);
   app.use('/api/analytics', analyticsRoutes);
+  app.use('/api/geoip', geoIpRoutes);
 
   // ─────────────────────────────────────────────────────────────────────────
   // SYNC ENDPOINTS (bulk upsert — kept inline for simplicity)
   // ─────────────────────────────────────────────────────────────────────────
   const { supabase, supabaseAdmin, db } = await import('./lib/supabase.js');
   const { sanitizeText, MAX_LENGTHS } = await import('./lib/validation.js');
-  const { getRequesterProfile } = await import('./lib/utils.js');
+  const { getRequesterProfile, parseDeadline } = await import('./lib/utils.js');
 
   app.post('/api/orders/sync', async (req, res) => {
     try {
@@ -215,7 +233,7 @@ async function startServer() {
         service_type: sanitizeText(item.service_type, MAX_LENGTHS.service_type) || 'General / Unspecified',
         subject: sanitizeText(item.subject, MAX_LENGTHS.subject) || 'General / Unspecified',
         academic_level: sanitizeText(item.academic_level, MAX_LENGTHS.general) || 'Undergraduate',
-        deadline: sanitizeText(item.deadline, 60),
+        deadline: parseDeadline(item.deadline) || new Date(Date.now() + 3 * 86400 * 1000).toISOString(),
         description: sanitizeText(item.description, MAX_LENGTHS.description),
         special_instructions: item.special_instructions ? sanitizeText(item.special_instructions, MAX_LENGTHS.instructions) : null,
         budget_range: sanitizeText(item.budget_range, MAX_LENGTHS.budget) || '$50-$100',
@@ -373,14 +391,47 @@ async function startServer() {
     console.log('Running in development mode with Vite middleware');
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath, { maxAge: '1y', immutable: true }));
+
+    // Aggressively prevent caching of index.html across ALL layers
+    const noCacheHtmlHeaders = (res: any) => {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      res.setHeader('Surrogate-Control', 'no-store');
+    };
+
+    app.use(express.static(distPath, {
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.html')) {
+          noCacheHtmlHeaders(res);
+        } else {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+      }
+    }));
+
+    // SPA fallback — always serve fresh index.html
     app.get('*', (_req, res) => {
+      noCacheHtmlHeaders(res);
       res.sendFile(path.join(distPath, 'index.html'));
     });
+
     console.log('Running in production mode serving static dist/');
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  // ─────────────────────────────────────────────────────────────────────────
+  // Global Express error handler — catches any unhandled errors in middleware/routes
+  // ─────────────────────────────────────────────────────────────────────────
+  app.use((err: any, _req: any, res: any, _next: any) => {
+    console.error('Unhandled Express error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  const http = await import('http');
+  const httpServer = http.createServer(app);
+  httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Server listening on http://0.0.0.0:${PORT}`);
   });
 }

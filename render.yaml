@@ -1,0 +1,53 @@
+services:
+  - type: web
+    name: acescholar
+    runtime: node
+    plan: free
+    buildCommand: npm install --legacy-peer-deps && npm run build
+    startCommand: node dist/server.cjs
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: VITE_SUPABASE_URL
+        value: https://knrkywdpjhxcnhevwyad.supabase.co
+      - key: VITE_SUPABASE_ANON_KEY
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtucmt5d2Rwamh4Y25oZXZ3eWFkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyNTIxMzcsImV4cCI6MjA5ODgyODEzN30.GgHTJSxW5aiKDvD8NgcDw9P-bGLogi9Df-qlMX5wU3M
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: ADMIN_EMAIL
+        value: kaleabnt369@gmail.com
+      - key: ALLOWED_ORIGIN
+        value: https://acescholar.onrender.com
+      - key: ADMIN_CUT_PERCENT
+        value: "10"
+      - key: CBE_ACCOUNT_NUMBER
+        value: "1000595818706"
+      - key: CBE_ACCOUNT_NAME
+        value: "Kaleab Dereje"
+      - key: TELEBIRR_NUMBER
+        value: "0965588294"
+      - key: TELEBIRR_NAME
+        value: "Kaleab Dereje"
+      - key: BOA_ACCOUNT_NUMBER
+        value: "230776148"
+      - key: BOA_ACCOUNT_NAME
+        value: "Kaleab Dereje"
+      - key: USDT_ERC20_ADDRESS
+        value: "0x07b4ab427ebc9ed6cdb3af72ae052853a4437bc0"
+      - key: USDT_TRC20_ADDRESS
+        value: "TBBP83gJVVZjGRtzZm45FwmiJ5XnCpiAGs"
+      - key: USDT_BEP20_ADDRESS
+        value: "0x07b4ab427ebc9ed6cdb3af72ae052853a4437bc0"
+      - key: BTC_ADDRESS
+        value: "12GuF9JVLzQrfgvNjLXhAkebSN7552ViMm"
+      - key: CRYPTO_DISCOUNT_PERCENT
+        value: "10"
+      - key: CARD_NAME
+        value: "Credit / Debit Card"
+      - key: BYBIT_CARD_NUMBER
+        value: "4938755438052696"
+      - key: BYBIT_CARD_HOLDER_NAME
+        value: "Kaleab Dereje"

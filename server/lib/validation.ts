@@ -1,7 +1,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // INPUT VALIDATION & SANITIZATION LAYER
 // ─────────────────────────────────────────────────────────────────────────────
-import sanitizeHtml from 'sanitize-html';
 
 /** Structured 400-level error thrown by validators and caught per-route. */
 export class InputError extends Error {
@@ -43,22 +42,18 @@ export const ALLOWED_PAYMENT_METHODS  = ['bank_transfer','crypto'] as const;
 /**
  * Strip all HTML tags, null bytes, and non-printable control characters (keeping \t \n \r),
  * then trim and truncate to maxLen. Never throws; returns '' for null/undefined.
- *
- * Uses sanitize-html for robust HTML stripping that handles nested/malformed tags,
- * event handlers, javascript: URIs, and other XSS vectors.
  */
 export function sanitizeText(val: any, maxLen: number): string {
   if (val === null || val === undefined) return '';
-  const cleaned = sanitizeHtml(String(val), {
-    allowedTags: [],
-    allowedAttributes: {},
-    disallowedTagsMode: 'discard',
-  });
-  return cleaned
-    .replace(/\x00/g, '')                               // null bytes
-    .replace(/[\x01-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // non-printable control chars
+  const cleaned = String(val)
+    .replace(/<[^>]*>/g, '')                             // strip HTML tags
+    .replace(/&[a-zA-Z]+;/g, ' ')                        // strip HTML entities
+    .replace(/&#\d+;/g, ' ')                             // strip numeric entities
+    .replace(/\x00/g, '')                                // null bytes
+    .replace(/[\x01-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')  // non-printable control chars
     .trim()
     .slice(0, maxLen);
+  return cleaned;
 }
 
 /**

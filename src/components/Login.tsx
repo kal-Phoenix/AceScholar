@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { LogIn, Mail, Lock, GraduationCap, AlertTriangle, RefreshCw, ArrowRight } from 'lucide-react';
 import { PageType, Profile } from '../types';
-import { supabase } from '../lib/supabase';
-import { LOCAL_STORAGE_USER_KEY } from '../lib/constants';
+import { supabase, setSession } from '../lib/supabase';
 
 interface LoginProps {
   setCurrentPage: (page: PageType) => void;
@@ -60,14 +59,24 @@ export default function Login({ setCurrentPage, setUser, showToast, redirectPage
       const user = data;
       if (!user || !user.id) throw new Error('Authentication returned an empty user profile.');
 
-      localStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(user));
       setUser(user);
 
-      if (supabase && user.access_token && user.refresh_token) {
-        await supabase.auth.setSession({
+      if (user.access_token && user.refresh_token) {
+        const session = {
           access_token: user.access_token,
           refresh_token: user.refresh_token,
-        });
+          token_type: 'bearer' as const,
+          expires_in: 3600,
+          expires_at: Math.floor(Date.now() / 1000) + 3600,
+          user: { id: user.id, email: user.email, app_metadata: {}, user_metadata: {}, aud: 'authenticated', created_at: user.created_at },
+        };
+        setSession(session);
+        if (supabase) {
+          await supabase.auth.setSession({
+            access_token: user.access_token,
+            refresh_token: user.refresh_token,
+          });
+        }
       }
 
       if (showToast) showToast('Logged in successfully!', 'success');

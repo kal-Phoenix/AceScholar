@@ -24,6 +24,7 @@ export function getBasePrice(category: string, countryName: string) {
 
 interface OrderProps {
   user: Profile | null;
+  sessionRestored?: boolean;
   selectedServiceType: string | null;
   setSelectedServiceType: (service: string | null) => void;
   setCurrentPage: (page: PageType) => void;
@@ -73,7 +74,7 @@ const CARD_HOVER = 'hover:border-slate-700/80 hover:shadow-xl hover:shadow-black
 const INPUT = 'w-full bg-slate-950/60 border border-slate-800/80 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/15 rounded-xl py-2.5 px-3.5 text-sm text-slate-100 outline-none transition-all duration-200 placeholder:text-slate-600';
 const LABEL = 'block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider';
 
-export default function Order({ user, selectedServiceType, setSelectedServiceType, setCurrentPage, showToast, detectedLocation, setRedirectPage }: OrderProps) {
+export default function Order({ user, sessionRestored = true, selectedServiceType, setSelectedServiceType, setCurrentPage, showToast, detectedLocation, setRedirectPage }: OrderProps) {
   const [step, setStep] = useState(1);
   const budgetManuallyEditedRef = useRef(false);
 
@@ -126,16 +127,16 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
     let isMounted = true;
     (async () => {
       try {
-        const res = await fetch('https://open.er-api.com/v6/latest/USD');
+        const res = await fetch('/api/geoip/rates');
         if (res.ok) {
           const data = await res.json();
-          if (isMounted && data?.rates) {
+          if (isMounted && data) {
             setLiveRates({
-              ETB: data.rates.ETB ? parseFloat(data.rates.ETB.toFixed(2)) : DEFAULT_EXCHANGE_RATES.ETB?.rate || 120,
-              GBP: data.rates.GBP ? parseFloat(data.rates.GBP.toFixed(4)) : 0.79,
-              CAD: data.rates.CAD ? parseFloat(data.rates.CAD.toFixed(4)) : 1.36,
-              EUR: data.rates.EUR ? parseFloat(data.rates.EUR.toFixed(4)) : 0.92,
-              SAR: data.rates.SAR ? parseFloat(data.rates.SAR.toFixed(4)) : 3.75,
+              ETB: data.ETB ?? DEFAULT_EXCHANGE_RATES.ETB?.rate ?? 120,
+              GBP: data.GBP ?? 0.79,
+              CAD: data.CAD ?? 1.36,
+              EUR: data.EUR ?? 0.92,
+              SAR: data.SAR ?? 3.75,
             });
           }
         }
@@ -179,12 +180,8 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
   }, [serviceType, country, detectedLocation, liveRates]);
 
   const uploadFileToStorage = async (file: File, orderId: string): Promise<string | null> => {
-    try {
-      const compressed = await compressImage(file);
-      return await fallbackDb.uploadFile(compressed, file.name || `order-${orderId}.png`);
-    } catch {
-      return null;
-    }
+    const compressed = await compressImage(file);
+    return await fallbackDb.uploadFile(compressed, file.name || `order-${orderId}.png`);
   };
 
   const getMatchedExpert = () => {
@@ -216,6 +213,8 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
 
   const handleSubmit = async () => {
     if (!paymentChoice) { if (showToast) showToast('Please select a payment option.', 'error'); return; }
+    if (!sessionRestored) { if (showToast) showToast('Session still loading. Please wait a moment and try again.', 'error'); return; }
+    if (!user) { if (showToast) showToast('You must be logged in to place an order.', 'error'); if (setRedirectPage) setRedirectPage('order'); setCurrentPage('login'); return; }
     setIsSubmitting(true);
     try {
       const orderId = 'ord-' + crypto.randomUUID().replace(/-/g, '').substring(0, 12);
@@ -244,6 +243,14 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
           setIsSubmitting(false);
           return;
         }
+        let screenshotUrl: string | null = null;
+        if (showToast) showToast('Uploading payment proof...', 'success');
+        screenshotUrl = await fallbackDb.uploadFile(paymentScreenshot, paymentScreenshotName || `payment-${orderId}.png`);
+        if (!screenshotUrl) {
+          if (showToast) showToast('Failed to upload payment screenshot. Please try again.', 'error');
+          setIsSubmitting(false);
+          return;
+        }
         const refText = ethiopiaTxRef.trim();
         const activeMethod = isEthiopia ? ethiopiaMethod : internationalMethod;
         const methodLabel = isEthiopia
@@ -258,7 +265,7 @@ export default function Order({ user, selectedServiceType, setSelectedServiceTyp
           payment_method: isEthiopia ? `ethiopia_${ethiopiaMethod}` : internationalMethod,
           payment_method_type: paymentMethodType,
           payment_ref_number: refText || 'Screenshot Attached',
-          payment_screenshot: paymentScreenshot,
+          payment_screenshot: screenshotUrl,
           payment_status: 'pending',
         };
         if (showToast) showToast('Submitting order with payment proof...', 'success');

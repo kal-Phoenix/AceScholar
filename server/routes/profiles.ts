@@ -22,36 +22,54 @@ export async function getCachedUsers(): Promise<any[]> {
 
   // If too old, block and refresh; if just stale, serve stale and refresh async
   if (isTooOld) {
-    const adminClient = supabaseAdmin || db;
-    const { data, error } = await adminClient.auth.admin.listUsers();
-    if (!error) {
-      userCache.users = data?.users || [];
-      userCache.fetchedAt = now;
+    try {
+      const adminClient = supabaseAdmin || db;
+      const listUsersPromise = adminClient.auth.admin.listUsers();
+      const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((_, reject) =>
+        setTimeout(() => reject(new Error('listUsers timeout')), 8000)
+      );
+      const { data, error } = await Promise.race([listUsersPromise, timeoutPromise]) as any;
+      if (!error) {
+        userCache.users = data?.users || [];
+        userCache.fetchedAt = now;
+      }
+    } catch (e) {
+      console.error('getCachedUsers: listUsers failed (stale refresh):', e);
     }
     return userCache.users;
   }
 
   if (isStale) {
     // Refresh in background — return stale data immediately
-    const adminClient = supabaseAdmin || db;
-    adminClient.auth.admin.listUsers().then(({ data, error }) => {
-      if (!error) {
-        userCache.users = data?.users || [];
-        userCache.fetchedAt = Date.now();
-      }
-    }).catch(() => {});
+    try {
+      const adminClient = supabaseAdmin || db;
+      adminClient.auth.admin.listUsers().then(({ data, error }) => {
+        if (!error) {
+          userCache.users = data?.users || [];
+          userCache.fetchedAt = Date.now();
+        }
+      }).catch(() => {});
+    } catch { /* background refresh — ignore */ }
   }
 
   if (userCache.users.length === 0) {
     // Cold start — must fetch
-    const adminClient = supabaseAdmin || db;
-    const { data, error } = await adminClient.auth.admin.listUsers();
-    if (error) {
-      console.error('getCachedUsers: listUsers failed:', error.message);
-      return userCache.users;
+    try {
+      const adminClient = supabaseAdmin || db;
+      const listUsersPromise = adminClient.auth.admin.listUsers();
+      const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((_, reject) =>
+        setTimeout(() => reject(new Error('listUsers timeout')), 8000)
+      );
+      const { data, error } = await Promise.race([listUsersPromise, timeoutPromise]) as any;
+      if (error) {
+        console.error('getCachedUsers: listUsers failed:', error.message);
+        return userCache.users;
+      }
+      userCache.users = data?.users || [];
+      userCache.fetchedAt = now;
+    } catch (e) {
+      console.error('getCachedUsers: listUsers threw on cold start:', e);
     }
-    userCache.users = data?.users || [];
-    userCache.fetchedAt = now;
   }
 
   return userCache.users;

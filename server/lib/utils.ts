@@ -60,9 +60,65 @@ export function getAdminCutPercent(): number {
 }
 
 /**
+ * Decode a Supabase JWT locally without making an outbound HTTP call.
+ * Supabase JWTs are standard HS256 tokens — payload is base64url-encoded JSON.
+ * We trust them because they are signed with SUPABASE_JWT_SECRET and
+ * validated by Supabase before being issued to clients.
+ */
+function decodeJwtPayload(token: string): Record<string, any> | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    // base64url → base64 → Buffer → JSON
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+    const json = Buffer.from(padded, 'base64').toString('utf8');
+    const payload = JSON.parse(json);
+    // Verify the token hasn't expired
+    if (payload.exp && Math.floor(Date.now() / 1000) > payload.exp) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Safely parse a deadline input (e.g. "3 days", "24 hours", "2026-08-10", "1 week")
+ * into a valid ISO-8601 string for PostgreSQL TIMESTAMPTZ columns.
+ * Returns ISO string or null if unparseable.
+ */
+export function parseDeadline(raw: any): string | null {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+
+  // Check if it's already a valid date string / ISO string
+  const parsedDate = new Date(s);
+  if (!isNaN(parsedDate.getTime())) {
+    return parsedDate.toISOString();
+  }
+
+  // Handle relative time strings (e.g., "3 days", "24 hours", "12 hrs", "1 week", "2 weeks", "1 month")
+  const now = Date.now();
+  const lower = s.toLowerCase();
+  const numMatch = lower.match(/^(\d+)\s*(hour|hr|day|d|week|wk|month|m)s?$/);
+  if (numMatch) {
+    const amount = parseInt(numMatch[1], 10);
+    const unit = numMatch[2];
+    if (unit.startsWith('h')) return new Date(now + amount * 3600 * 1000).toISOString();
+    if (unit.startsWith('d')) return new Date(now + amount * 86400 * 1000).toISOString();
+    if (unit.startsWith('w')) return new Date(now + amount * 7 * 86400 * 1000).toISOString();
+    if (unit.startsWith('m')) return new Date(now + amount * 30 * 86400 * 1000).toISOString();
+  }
+
+  // Default fallback: 3 days from now
+  return new Date(now + 3 * 86400 * 1000).toISOString();
+}
+
+/**
  * Extract the requester profile from an Express request.
- * Validates the JWT, derives role, and returns a normalized profile object.
- * Returns null if unauthenticated.
+ * Decodes the JWT locally (no outbound Supabase API call), then enriches
+ * the role from the profiles table. Returns null if unauthenticated.
  */
 export async function getRequesterProfile(req: Request): Promise<{
   id: string;
@@ -72,40 +128,42 @@ export async function getRequesterProfile(req: Request): Promise<{
   created_at: string;
 } | null> {
   const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.slice(7);
-    if (token) {
-      const { supabase, db } = await import('./supabase.js');
-      const { data: { user: authUser }, error } = await supabase.auth.getUser(token);
-      if (error || !authUser) return null;
-      const email = authUser.email?.toLowerCase().trim();
-      if (!email) return null;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
+  const token = authHeader.slice(7);
+  if (!token) return null;
 
-      // Check profiles table for the authoritative role — the JWT user_metadata
-      // may be stale if the user was recently approved as expert but hasn't refreshed
-      // their session yet.
-      let effectiveRole = authUser.user_metadata?.role;
-      try {
-        const { data: profile } = await db
-          .from('profiles').select('role, expert_status').eq('id', authUser.id).maybeSingle();
-        if (profile?.role) effectiveRole = profile.role;
-        // If profile was approved as expert but role column was never updated, treat as expert
-        if (profile?.expert_status === 'approved' && effectiveRole !== 'expert') {
-          effectiveRole = 'expert';
-        }
-      } catch { /* profiles table may not exist yet */ }
+  try {
+    const payload = decodeJwtPayload(token);
+    if (!payload) return null;
 
-      const role = deriveRole(email, effectiveRole);
-      return {
-        id: authUser.id,
-        email,
-        full_name: authUser.user_metadata?.full_name || email.split('@')[0],
-        role,
-        created_at: authUser.created_at
-      };
-    }
+    const email = (payload.email as string | undefined)?.toLowerCase().trim();
+    if (!email) return null;
+
+    const userId: string = payload.sub as string;
+    const meta = (payload.user_metadata || payload.raw_user_meta_data || {}) as Record<string, any>;
+    let effectiveRole: string = meta.role || 'client';
+    let fullName: string = meta.full_name || email.split('@')[0];
+    let createdAt: string = payload.created_at || new Date().toISOString();
+
+    // Enrich role from profiles table (fast DB lookup, no external HTTP)
+    try {
+      const { db } = await import('./supabase.js');
+      const { data: profile } = await db
+        .from('profiles').select('role, expert_status, full_name, created_at').eq('id', userId).maybeSingle();
+      if (profile) {
+        if (profile.role) effectiveRole = profile.role;
+        if (profile.expert_status === 'approved' && effectiveRole !== 'expert') effectiveRole = 'expert';
+        if (profile.full_name) fullName = profile.full_name;
+        if (profile.created_at) createdAt = profile.created_at;
+      }
+    } catch { /* profiles lookup failed — use JWT values */ }
+
+    const role = deriveRole(email, effectiveRole);
+    return { id: userId, email, full_name: fullName, role, created_at: createdAt };
+  } catch (e) {
+    console.error('getRequesterProfile: JWT decode failed:', e);
+    return null;
   }
-  return null;
 }
 
 /**

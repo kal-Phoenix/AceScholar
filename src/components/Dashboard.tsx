@@ -4,7 +4,7 @@ import { PageType, Profile, Order as AcademicOrder, Message } from '../types';
 import { fallbackDb, getAuthHeaders } from '../lib/supabase';
 import {
   DOWNPAYMENT_THRESHOLD_USD, POLLING_INTERVAL_MS, REVISION_DEADLINE_MS,
-  HOURS_DIVISOR, LOCAL_STORAGE_USER_KEY,
+  HOURS_DIVISOR,
 } from '../lib/constants';
 
 interface DashboardProps {
@@ -270,8 +270,6 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
         const updatedProfile = { ...user, ...data.profile };
         if (setUser) {
           setUser(updatedProfile);
-        } else {
-          localStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(updatedProfile));
         }
 
         setShowBecomeExpertModal(false);

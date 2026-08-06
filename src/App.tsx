@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { PageType, Profile } from './types';
-import { supabase } from './lib/supabase';
+import { supabase, setSession } from './lib/supabase';
 import Navbar from './components/Navbar';
 import Home from './components/Home';
 import Services from './components/Services';
@@ -20,7 +20,7 @@ import Footer from './components/Footer';
 import WhatsAppButton from './components/WhatsAppButton';
 import ErrorBoundary from './components/ErrorBoundary';
 import { CheckCircle2, AlertCircle, X } from 'lucide-react';
-import { DEFAULT_EXCHANGE_RATES, DEFAULT_FALLBACK_CITY, DEFAULT_FALLBACK_COUNTRY, DEFAULT_FALLBACK_CURRENCY, LOCAL_STORAGE_USER_KEY } from './lib/constants';
+import { DEFAULT_EXCHANGE_RATES, DEFAULT_FALLBACK_CITY, DEFAULT_FALLBACK_COUNTRY, DEFAULT_FALLBACK_CURRENCY } from './lib/constants';
 
 // Parse exchange rates from env var (JSON string → lookup map), falling back to defaults
 const EXCHANGE_RATES: Record<string, { symbol: string; rate: number }> = (() => {
@@ -45,26 +45,48 @@ export default function App() {
   const [redirectPage, setRedirectPage] = useState<PageType | null>(null);
   
   // Persistence of active session
-  const [user, setUser] = useState<Profile | null>(() => {
-    if (typeof window === 'undefined') return null;
-    try {
-      const stored = localStorage.getItem(LOCAL_STORAGE_USER_KEY);
-      return stored ? JSON.parse(stored) : null;
-    } catch {
-      localStorage.removeItem(LOCAL_STORAGE_USER_KEY);
-      return null;
-    }
-  });
+  const [user, setUser] = useState<Profile | null>(null);
+  const [sessionRestored, setSessionRestored] = useState(false);
 
-  // Restore Supabase client session from Supabase's internal storage on page load
+  // Restore session from Supabase on page load and subscribe to changes
   useEffect(() => {
-    if (supabase) {
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session) {
-          // Session is managed by Supabase internally — no need to restore from localStorage
-        }
-      }).catch(() => {});
-    }
+    if (!supabase) { setSessionRestored(true); return; }
+
+    // Immediately restore existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setSession(session);
+        const u = session.user;
+        setUser({
+          id: u.id,
+          email: u.email || '',
+          full_name: u.user_metadata?.full_name || u.email?.split('@')[0] || '',
+          role: (u.user_metadata?.role as any) || 'client',
+          created_at: u.created_at,
+        });
+      }
+      setSessionRestored(true);
+    }).catch(() => { setSessionRestored(true); });
+
+    // Keep session fresh via auth state changes (token refresh, signout, etc.)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setSession(session);
+        const u = session.user;
+        setUser({
+          id: u.id,
+          email: u.email || '',
+          full_name: u.user_metadata?.full_name || u.email?.split('@')[0] || '',
+          role: (u.user_metadata?.role as any) || 'client',
+          created_at: u.created_at,
+        });
+      } else if (_event === 'SIGNED_OUT') {
+        setSession(null);
+        setUser(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   // Toast State
@@ -92,64 +114,29 @@ export default function App() {
   useEffect(() => {
     let isMounted = true;
     const detectGeoIP = async () => {
+      // 1. Try server-side /api/geoip endpoint (bypasses browser tracking protection & CORS)
       try {
-        const res = await fetch('https://ipapi.co/json/');
-        if (!res.ok) throw new Error('Failed to fetch from ipapi');
-        const data = await res.json();
-        if (isMounted && data && data.country_name) {
-          const countryName = data.country_name;
-          const currCode = data.currency || (countryName === 'Ethiopia' ? 'ETB' : 'USD');
-          
-          const { symbol, rate } = getCurrencyConfig(currCode);
-
-          setDetectedLocation({
-            country: countryName,
-            currency: currCode,
-            symbol,
-            exchangeRate: rate,
-            ip: data.ip || '',
-            city: data.city || DEFAULT_FALLBACK_CITY,
-            loading: false,
-          });
-          return;
+        const res = await fetch('/api/geoip');
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && data && data.country) {
+            setDetectedLocation({
+              country: data.country,
+              currency: data.currency,
+              symbol: data.symbol,
+              exchangeRate: data.exchangeRate,
+              ip: data.ip || '',
+              city: data.city || DEFAULT_FALLBACK_CITY,
+              loading: false,
+            });
+            return;
+          }
         }
       } catch (error) {
-        console.warn('ipapi.co lookup failed, trying freeipapi.com secondary provider...', error);
+        // Silent catch — fallback below
       }
 
-      // Try freeipapi.com as secondary provider
-      try {
-        const res = await fetch('https://freeipapi.com/api/json');
-        if (!res.ok) throw new Error('Failed to fetch from freeipapi');
-        const data = await res.json();
-        if (isMounted && data && data.countryName) {
-          const countryName = data.countryName;
-          let currCode = 'USD';
-          const countryLower = countryName.toLowerCase();
-
-          if (countryLower === 'ethiopia') currCode = 'ETB';
-          else if (countryLower === 'united kingdom') currCode = 'GBP';
-          else if (countryLower === 'germany' || countryLower === 'france' || countryLower === 'italy') currCode = 'EUR';
-          else if (countryLower === 'canada') currCode = 'CAD';
-          else if (countryLower === 'saudi arabia') currCode = 'SAR';
-
-          const { symbol, rate } = getCurrencyConfig(currCode);
-
-          setDetectedLocation({
-            country: countryName,
-            currency: currCode,
-            symbol,
-            exchangeRate: rate,
-            ip: data.ipAddress || '',
-            city: data.cityName || DEFAULT_FALLBACK_CITY,
-            loading: false,
-          });
-          return;
-        }
-      } catch (err) {
-        console.warn('Secondary freeipapi lookup failed, applying timezone fallback:', err);
-      }
-
+      // 2. Immediate timezone fallback if server endpoint is unavailable
       if (isMounted) {
         const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
           let countryName = 'Ethiopia';
@@ -216,13 +203,6 @@ export default function App() {
 
   const handleSetUser = (newUser: Profile | null) => {
     setUser(newUser);
-    if (newUser) {
-      // Strip tokens before persisting to localStorage — tokens are managed by Supabase internally
-      const { access_token, refresh_token, ...safeProfile } = newUser as any;
-      localStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(safeProfile));
-    } else {
-      localStorage.removeItem(LOCAL_STORAGE_USER_KEY);
-    }
   };
 
   // Sync IP-detected country to user profile so components (e.g. withdrawal methods) can detect it
@@ -232,10 +212,7 @@ export default function App() {
     if (!detected) return;
     setUser(prev => {
       if (!prev || prev.country === detected) return prev;
-      const updated = { ...prev, country: detected };
-      const { access_token, refresh_token, ...safeProfile } = updated as any;
-      localStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(safeProfile));
-      return updated;
+      return { ...prev, country: detected };
     });
   }, [detectedLocation.loading, detectedLocation.country]);
 
@@ -331,6 +308,7 @@ export default function App() {
         return (
           <Order
             user={user}
+            sessionRestored={sessionRestored}
             selectedServiceType={selectedServiceType}
             setSelectedServiceType={setSelectedServiceType}
             setCurrentPage={handleSetPage}
@@ -385,7 +363,7 @@ export default function App() {
       )}
 
       {/* 4. GLOBAL FLOATING SUPPORT CHANNEL */}
-      {!isFullscreenPage && <WhatsAppButton />}
+      {!isFullscreenPage && <WhatsAppButton user={user} />}
 
       {/* 5. CUSTOM SLATE FLOATING TOASTS */}
       {toast && (

@@ -1,32 +1,33 @@
 import { Profile, Order, Message, ContactMessage, Payment, Withdrawal, Rating, Notification } from '../types';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, Session } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-// Supabase client — used only for Auth (signIn, signUp, getSession).
-// All data reads/writes go through the backend API, NOT directly via this client.
 export const supabase = supabaseUrl && supabaseAnonKey
-  ? createClient(supabaseUrl, supabaseAnonKey)
+  ? createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: true, autoRefreshToken: true } })
   : null;
 
-/**
- * Returns auth headers for backend API requests.
- * Uses the Supabase client's getSession() to get a fresh (auto-refreshed) JWT.
- * Tokens are NEVER stored in localStorage — they are managed by Supabase's
- * internal session storage (which uses httpOnly cookies when configured).
- */
+let currentSession: Session | null = null;
+
+export const setSession = (session: Session | null) => { currentSession = session; };
+
 export const getAuthHeaders = async (): Promise<Record<string, string>> => {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   try {
+    if (currentSession?.access_token) {
+      headers['Authorization'] = `Bearer ${currentSession.access_token}`;
+      return headers;
+    }
     if (supabase) {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.access_token) {
         headers['Authorization'] = `Bearer ${session.access_token}`;
+        return headers;
       }
     }
   } catch (e) {
-    console.error('Error reading auth headers from session:', e);
+    console.error('Error reading auth headers:', e);
   }
   return headers;
 };
@@ -111,21 +112,36 @@ export const fallbackDb = {
    * Create a single new order via backend POST.
    */
   createOrder: async (order: Omit<Order, 'created_at'>): Promise<Order | null> => {
-    try {
-      const res = await fetch('/api/orders', {
-        method: 'POST',
-        headers: await getAuthHeaders(),
-        body: JSON.stringify(order),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `HTTP ${res.status}`);
+    const maxRetries = 2;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+        const headers = await getAuthHeaders();
+        const res = await fetch('/api/orders', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(order),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || `HTTP ${res.status}`);
+        }
+        return await res.json();
+      } catch (e: any) {
+        const isNetwork = e?.name === 'AbortError' || e?.message?.includes('NetworkError') || e?.message?.includes('Failed to fetch') || e?.message?.includes('network');
+        if (isNetwork && attempt < maxRetries) {
+          console.warn(`createOrder attempt ${attempt} failed (${e.message}), retrying...`);
+          await new Promise(r => setTimeout(r, 1000 * attempt));
+          continue;
+        }
+        console.error('createOrder failed:', e);
+        throw e;
       }
-      return await res.json();
-    } catch (e) {
-      console.error('createOrder failed:', e);
-      return null;
     }
+    return null;
   },
 
   /**

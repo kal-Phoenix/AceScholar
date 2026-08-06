@@ -1,18 +1,16 @@
 import { useState, useEffect } from 'react';
 import { MessageCircle } from 'lucide-react';
 import { Profile } from '../types';
-import { LOCAL_STORAGE_USER_KEY } from '../lib/constants';
 
-export default function WhatsAppButton() {
-  const [user, setUser] = useState<Profile | null>(null);
+interface WhatsAppButtonProps {
+  user?: Profile | null;
+}
+
+export default function WhatsAppButton({ user }: WhatsAppButtonProps) {
   const [isTooltipVisible, setIsTooltipVisible] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem(LOCAL_STORAGE_USER_KEY);
-    if (stored) {
-      try { setUser(JSON.parse(stored)); } catch {}
-    }
     // Delay appearance for polish
     const timer = setTimeout(() => setIsVisible(true), 1000);
     return () => clearTimeout(timer);
