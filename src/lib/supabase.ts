@@ -183,8 +183,9 @@ export const fallbackDb = {
 
   /**
    * Create a new order directly via Supabase client.
-   * Uses getSession() (local storage) instead of getUser() (network call)
-   * for reliable auth — avoids Fly proxy HTTP/2 body forwarding issues.
+   * Uses the module-level currentSession (set by App.tsx onAuthStateChange)
+   * instead of supabase.auth.getUser()/getSession() which can fail when the
+   * Supabase client's internal session state is stale.
    */
   createOrder: async (order: Omit<Order, 'created_at'>): Promise<Order | null> => {
     if (!supabase) {
@@ -193,10 +194,9 @@ export const fallbackDb = {
     }
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) throw new Error('Authentication required');
+      if (!currentSession?.user) throw new Error('Authentication required');
 
-      const user = session.user;
+      const user = currentSession.user;
       const sanitize = (s: string, max: number) => (s || '').trim().replace(/<[^>]*>/g, '').replace(/\0/g, '').substring(0, max);
 
       const record: Record<string, any> = {
