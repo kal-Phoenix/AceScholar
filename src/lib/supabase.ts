@@ -35,12 +35,13 @@ export const getAuthHeaders = async (): Promise<Record<string, string>> => {
 /**
  * Supabase-backed data API.
  *
- * All reads and writes go through the Express backend (/api/*).
+ * Most reads and writes go through the Express backend (/api/*).
  * The backend owns the Supabase service-role client and enforces
  * business logic / RLS bypass where needed.
  *
- * NO data is stored in localStorage. NO direct Supabase queries
- * are made from the frontend for database tables.
+ * Some read paths use the Supabase JS client directly (with RLS).
+ * Write paths (create/update orders) go through the server API for
+ * reliable JWT-based auth via the Authorization header.
  */
 export const fallbackDb = {
   // ─────────────────────────────────────────────────────────────────────────
@@ -78,14 +79,86 @@ export const fallbackDb = {
   // ─────────────────────────────────────────────────────────────────────────
 
   getOrders: async (page = 1, limit = 50): Promise<{ data: Order[]; total: number; page: number; limit: number }> => {
+    if (!supabase) {
+      console.error('getOrders failed: Supabase client not configured');
+      return { data: [], total: 0, page, limit };
+    }
+
     try {
-      const headers = await getAuthHeaders();
-      const res = await fetch(`/api/orders?page=${page}&limit=${limit}`, { headers });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `HTTP ${res.status}`);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { data: [], total: 0, page, limit };
+
+      const role = (user.user_metadata?.role as string) || 'client';
+      const offset = (page - 1) * limit;
+
+      // Client: RLS enforces auth.uid() = client_id
+      if (role === 'client') {
+        const { count } = await supabase
+          .from('orders')
+          .select('*', { count: 'exact', head: true })
+          .eq('client_email', user.email?.toLowerCase() || '');
+
+        const { data, error } = await supabase
+          .from('orders')
+          .select('*')
+          .eq('client_email', user.email?.toLowerCase() || '')
+          .order('created_at', { ascending: false })
+          .range(offset, offset + limit - 1);
+
+        if (error) throw error;
+        return { data: (data as Order[]) || [], total: count || 0, page, limit };
       }
-      return await res.json();
+
+      // Admin: RLS allows full access via profile role check
+      if (role === 'admin') {
+        const { count } = await supabase
+          .from('orders')
+          .select('*', { count: 'exact', head: true });
+
+        const { data, error } = await supabase
+          .from('orders')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .range(offset, offset + limit - 1);
+
+        if (error) throw error;
+        return { data: (data as Order[]) || [], total: count || 0, page, limit };
+      }
+
+      // Expert: needs RLS policy (see supabase-expert-rls.sql)
+      // Query unallocated + assigned orders, filter in JS
+      const fullName = user.user_metadata?.full_name || user.email?.split('@')[0] || '';
+
+      const { data: unallocated } = await supabase
+        .from('orders')
+        .select('*')
+        .or('assigned_to.is.null,assigned_to.eq.,assigned_to.eq.Unallocated')
+        .order('created_at', { ascending: false });
+
+      const { data: assigned } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('assigned_to', fullName)
+        .order('created_at', { ascending: false });
+
+      // Deduplicate
+      const allMap = new Map<string, Order>();
+      for (const o of [...(unallocated || []), ...(assigned || [])]) {
+        allMap.set(o.id, o as Order);
+      }
+      const all = Array.from(allMap.values());
+
+      // Filter: expert can see unallocated or assigned to them
+      const filtered = all.filter((o: Order) => {
+        if (!o.assigned_to || o.assigned_to.trim() === '' || o.assigned_to === 'Unallocated') return true;
+        if (o.assigned_to.toLowerCase() === user.email?.toLowerCase()) return true;
+        if (o.assigned_to.toLowerCase().trim() === fullName.toLowerCase().trim()) return true;
+        return false;
+      });
+
+      const total = filtered.length;
+      const paginated = filtered.slice(offset, offset + limit);
+      return { data: paginated, total, page, limit };
     } catch (e) {
       console.error('getOrders failed:', e);
       return { data: [], total: 0, page, limit };
@@ -109,50 +182,86 @@ export const fallbackDb = {
   },
 
   /**
-   * Create a single new order via backend POST.
+   * Create a new order via the server-side API.
+   * Auth is handled by the Authorization header (Bearer token), which the
+   * server decodes locally — more reliable than relying on the Supabase
+   * client's internal session state.
    */
   createOrder: async (order: Omit<Order, 'created_at'>): Promise<Order | null> => {
-    const maxRetries = 2;
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000);
-        const headers = await getAuthHeaders();
-        const res = await fetch('/api/orders', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(order),
-          signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error || `HTTP ${res.status}`);
-        }
-        return await res.json();
-      } catch (e: any) {
-        const isNetwork = e?.name === 'AbortError' || e?.message?.includes('NetworkError') || e?.message?.includes('Failed to fetch') || e?.message?.includes('network');
-        if (isNetwork && attempt < maxRetries) {
-          console.warn(`createOrder attempt ${attempt} failed (${e.message}), retrying...`);
-          await new Promise(r => setTimeout(r, 1000 * attempt));
-          continue;
-        }
-        console.error('createOrder failed:', e);
-        throw e;
+    try {
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: await getAuthHeaders(),
+        body: JSON.stringify({
+          id: order.id,
+          client_name: order.client_name,
+          client_email: order.client_email,
+          service_type: order.service_type,
+          subject: order.subject,
+          academic_level: order.academic_level,
+          deadline: order.deadline,
+          description: order.description,
+          special_instructions: order.special_instructions,
+          budget_range: order.budget_range,
+          status: order.status,
+          payment_status: order.payment_status,
+          payment_method: order.payment_method,
+          payment_screenshot: order.payment_screenshot,
+          payment_ref_number: order.payment_ref_number,
+          payment_id: order.payment_id,
+          total_amount: order.total_amount,
+          currency: order.currency,
+          applicants: order.applicants,
+          internal_notes: order.internal_notes,
+          agreed_price: order.agreed_price,
+          preview_url: order.preview_url,
+          preview_name: order.preview_name,
+          payment_awaiting: order.payment_awaiting,
+          payment_method_type: order.payment_method_type,
+          crypto_discount_applied: order.crypto_discount_applied,
+          delivery_released: order.delivery_released,
+          expert_submission_url: order.expert_submission_url,
+          expert_submission_name: order.expert_submission_name,
+          admin_screenshots: order.admin_screenshots,
+          file_url: order.file_url,
+          file_name: order.file_name,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${res.status}`);
       }
+      return await res.json();
+    } catch (e) {
+      console.error('createOrder failed:', e);
+      throw e;
     }
-    return null;
   },
 
   /**
-   * Update a single order field set via backend PUT.
+   * Update a single order via the server-side API.
    */
   updateOrder: async (orderId: string, updates: Partial<Order>): Promise<Order | null> => {
     try {
-      const res = await fetch(`/api/orders/${orderId}`, {
+      const WRITABLE = new Set([
+        'status', 'assigned_to', 'expert_accepted', 'delivery_url', 'delivery_name',
+        'expert_submission_url', 'expert_submission_name', 'description',
+        'payment_status', 'payment_method', 'payment_screenshot', 'payment_ref_number',
+        'internal_notes', 'file_url', 'file_name', 'applicants',
+        'agreed_price', 'preview_url', 'preview_name', 'payment_awaiting',
+        'payment_method_type', 'crypto_discount_applied', 'delivery_released',
+        'admin_screenshots', 'total_amount', 'currency',
+      ]);
+      const safe: Record<string, any> = {};
+      for (const [k, v] of Object.entries(updates)) {
+        if (WRITABLE.has(k) && v !== undefined) safe[k] = v;
+      }
+      if (Object.keys(safe).length === 0) return null;
+
+      const res = await fetch(`/api/orders/${encodeURIComponent(orderId)}`, {
         method: 'PUT',
         headers: await getAuthHeaders(),
-        body: JSON.stringify(updates),
+        body: JSON.stringify(safe),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));

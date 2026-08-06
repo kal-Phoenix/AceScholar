@@ -4,25 +4,8 @@ primary_region = 'iad'
 [env]
   PORT = "3000"
   NODE_ENV = "production"
-  ALLOWED_ORIGIN = "https://acescholar.fly.dev"
   VITE_SUPABASE_URL = "https://knrkywdpjhxcnhevwyad.supabase.co"
   VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtucmt5d2Rwamh4Y25oZXZ3eWFkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyNTIxMzcsImV4cCI6MjA5ODgyODEzN30.GgHTJSxW5aiKDvD8NgcDw9P-bGLogi9Df-qlMX5wU3M"
-  ADMIN_EMAIL = "kaleabnt369@gmail.com"
-  ADMIN_CUT_PERCENT = "10"
-  CBE_ACCOUNT_NUMBER = "1000595818706"
-  CBE_ACCOUNT_NAME = "Kaleab Dereje"
-  TELEBIRR_NUMBER = "0965588294"
-  TELEBIRR_NAME = "Kaleab Dereje"
-  BOA_ACCOUNT_NUMBER = "230776148"
-  BOA_ACCOUNT_NAME = "Kaleab Dereje"
-  USDT_ERC20_ADDRESS = "0x07b4ab427ebc9ed6cdb3af72ae052853a4437bc0"
-  USDT_TRC20_ADDRESS = "TBBP83gJVVZjGRtzZm45FwmiJ5XnCpiAGs"
-  USDT_BEP20_ADDRESS = "0x07b4ab427ebc9ed6cdb3af72ae052853a4437bc0"
-  BTC_ADDRESS = "12GuF9JVLzQrfgvNjLXhAkebSN7552ViMm"
-  CRYPTO_DISCOUNT_PERCENT = "10"
-  CARD_NAME = "Credit / Debit Card"
-  BYBIT_CARD_NUMBER = "4938755438052696"
-  BYBIT_CARD_HOLDER_NAME = "Kaleab Dereje"
 
 [build]
   [build.args]

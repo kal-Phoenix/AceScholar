@@ -2,6 +2,7 @@ import './lib/load-env.js';
 import { validateEnv } from './lib/validate-env.js';
 validateEnv();
 import express from 'express';
+import compression from 'compression';
 import path from 'path';
 import crypto from 'crypto';
 import helmet from 'helmet';
@@ -91,6 +92,13 @@ async function startServer() {
     next();
   });
 
+  // Disable proxy buffering — helps Fly's HTTP/2 proxy read responses cleanly
+  app.use((_req, res, next) => {
+    res.setHeader('X-Accel-Buffering', 'no');
+    next();
+  });
+
+  app.use(compression());
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ limit: '10mb', extended: false }));
 
@@ -431,6 +439,10 @@ async function startServer() {
 
   const http = await import('http');
   const httpServer = http.createServer(app);
+
+  httpServer.keepAliveTimeout = 65_000;
+  httpServer.headersTimeout = 70_000;
+
   httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Server listening on http://0.0.0.0:${PORT}`);
   });
