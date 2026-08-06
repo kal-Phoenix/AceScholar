@@ -182,56 +182,72 @@ export const fallbackDb = {
   },
 
   /**
-   * Create a new order via the server-side API.
-   * Auth is handled by the Authorization header (Bearer token), which the
-   * server decodes locally — more reliable than relying on the Supabase
-   * client's internal session state.
+   * Create a new order directly via Supabase client.
+   * Uses getSession() (local storage) instead of getUser() (network call)
+   * for reliable auth — avoids Fly proxy HTTP/2 body forwarding issues.
    */
   createOrder: async (order: Omit<Order, 'created_at'>): Promise<Order | null> => {
+    if (!supabase) {
+      console.error('createOrder failed: Supabase client not configured');
+      return null;
+    }
+
     try {
-      const res = await fetch('/api/orders', {
-        method: 'POST',
-        headers: await getAuthHeaders(),
-        body: JSON.stringify({
-          id: order.id,
-          client_name: order.client_name,
-          client_email: order.client_email,
-          service_type: order.service_type,
-          subject: order.subject,
-          academic_level: order.academic_level,
-          deadline: order.deadline,
-          description: order.description,
-          special_instructions: order.special_instructions,
-          budget_range: order.budget_range,
-          status: order.status,
-          payment_status: order.payment_status,
-          payment_method: order.payment_method,
-          payment_screenshot: order.payment_screenshot,
-          payment_ref_number: order.payment_ref_number,
-          payment_id: order.payment_id,
-          total_amount: order.total_amount,
-          currency: order.currency,
-          applicants: order.applicants,
-          internal_notes: order.internal_notes,
-          agreed_price: order.agreed_price,
-          preview_url: order.preview_url,
-          preview_name: order.preview_name,
-          payment_awaiting: order.payment_awaiting,
-          payment_method_type: order.payment_method_type,
-          crypto_discount_applied: order.crypto_discount_applied,
-          delivery_released: order.delivery_released,
-          expert_submission_url: order.expert_submission_url,
-          expert_submission_name: order.expert_submission_name,
-          admin_screenshots: order.admin_screenshots,
-          file_url: order.file_url,
-          file_name: order.file_name,
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `HTTP ${res.status}`);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) throw new Error('Authentication required');
+
+      const user = session.user;
+      const sanitize = (s: string, max: number) => (s || '').trim().replace(/<[^>]*>/g, '').replace(/\0/g, '').substring(0, max);
+
+      const record: Record<string, any> = {
+        id: (order.id || '').replace(/[^a-zA-Z0-9_-]/g, '').substring(0, 80) || 'ord-' + crypto.randomUUID().replace(/-/g, '').substring(0, 12),
+        client_id: user.id,
+        client_name: sanitize(order.client_name, 100) || 'Anonymous',
+        client_email: user.email?.toLowerCase().trim() || '',
+        service_type: sanitize(order.service_type, 120) || 'General / Unspecified',
+        subject: sanitize(order.subject, 200) || 'General / Unspecified',
+        academic_level: sanitize(order.academic_level, 500) || 'Undergraduate',
+        deadline: order.deadline || new Date(Date.now() + 3 * 86400 * 1000).toISOString(),
+        description: sanitize(order.description, 8000),
+        special_instructions: order.special_instructions ? sanitize(order.special_instructions, 3000) : null,
+        budget_range: sanitize(order.budget_range, 60) || '$50-$100',
+        status: order.status || 'pending',
+        created_at: new Date().toISOString(),
+        payment_status: ['pending', 'approved', 'rejected'].includes(order.payment_status || '') ? order.payment_status : 'pending',
+        payment_method: order.payment_method ? sanitize(String(order.payment_method), 120) : null,
+        payment_screenshot: order.payment_screenshot || null,
+        payment_ref_number: order.payment_ref_number ? sanitize(String(order.payment_ref_number), 100) : null,
+        payment_id: order.payment_id ? sanitize(String(order.payment_id), 80) : null,
+        total_amount: typeof order.total_amount === 'number' && order.total_amount >= 0 ? order.total_amount : 100,
+        currency: (order.currency || 'USD').toUpperCase().substring(0, 10),
+        applicants: Array.isArray(order.applicants) ? order.applicants.slice(0, 100) : [],
+        internal_notes: order.internal_notes ? sanitize(order.internal_notes, 10000) : null,
+        agreed_price: typeof order.agreed_price === 'number' ? order.agreed_price : null,
+        preview_url: order.preview_url || null,
+        preview_name: order.preview_name ? sanitize(order.preview_name, 200) : null,
+        payment_awaiting: Boolean(order.payment_awaiting) || false,
+        payment_method_type: ['bank_transfer', 'crypto', 'card'].includes(order.payment_method_type || '') ? order.payment_method_type : null,
+        crypto_discount_applied: Boolean(order.crypto_discount_applied) || false,
+        delivery_released: Boolean(order.delivery_released) || false,
+        expert_submission_url: order.expert_submission_url || null,
+        expert_submission_name: order.expert_submission_name ? sanitize(order.expert_submission_name, 200) : null,
+        admin_screenshots: Array.isArray(order.admin_screenshots) ? order.admin_screenshots : null,
+        file_url: order.file_url || null,
+        file_name: order.file_name ? sanitize(order.file_name, 200) : null,
+      };
+
+      const { data, error } = await supabase
+        .from('orders')
+        .insert([record])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('createOrder Supabase error:', error.message);
+        throw new Error(error.message || 'Failed to create order');
       }
-      return await res.json();
+
+      return data as Order;
     } catch (e) {
       console.error('createOrder failed:', e);
       throw e;
@@ -239,9 +255,13 @@ export const fallbackDb = {
   },
 
   /**
-   * Update a single order via the server-side API.
+   * Update a single order directly via Supabase client.
    */
   updateOrder: async (orderId: string, updates: Partial<Order>): Promise<Order | null> => {
+    if (!supabase) {
+      console.error('updateOrder failed: Supabase client not configured');
+      return null;
+    }
     try {
       const WRITABLE = new Set([
         'status', 'assigned_to', 'expert_accepted', 'delivery_url', 'delivery_name',
@@ -258,16 +278,17 @@ export const fallbackDb = {
       }
       if (Object.keys(safe).length === 0) return null;
 
-      const res = await fetch(`/api/orders/${encodeURIComponent(orderId)}`, {
-        method: 'PUT',
-        headers: await getAuthHeaders(),
-        body: JSON.stringify(safe),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `HTTP ${res.status}`);
+      const { data, error } = await supabase
+        .from('orders')
+        .update(safe)
+        .eq('id', orderId)
+        .select()
+        .single();
+      if (error) {
+        console.error('updateOrder Supabase error:', error.message);
+        return null;
       }
-      return await res.json();
+      return data as Order;
     } catch (e) {
       console.error('updateOrder failed:', e);
       return null;
