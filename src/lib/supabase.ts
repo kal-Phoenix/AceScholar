@@ -85,9 +85,9 @@ export const fallbackDb = {
     }
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return { data: [], total: 0, page, limit };
+      if (!currentSession?.user) return { data: [], total: 0, page, limit };
 
+      const user = currentSession.user;
       const role = (user.user_metadata?.role as string) || 'client';
       const offset = (page - 1) * limit;
 
