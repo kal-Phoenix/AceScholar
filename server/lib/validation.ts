@@ -92,10 +92,10 @@ export function requireIdParam(val: any, fieldName: string): string {
   return s;
 }
 
-/** Legacy helper kept for internal serialization use only. */
-export function safeString(val: any, defaultVal = ''): string {
+/** Sanitize a value to a trimmed string, capped at maxLen. Never throws. */
+export function safeString(val: any, defaultVal = '', maxLen = 500): string {
   if (val === undefined || val === null) return defaultVal;
-  return String(val).trim();
+  return String(val).trim().slice(0, maxLen);
 }
 
 export function isValidEmail(email: any): boolean {

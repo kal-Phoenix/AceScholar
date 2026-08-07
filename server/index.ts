@@ -35,6 +35,7 @@ async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
 
+  // Fly.io terminates TLS at its edge proxy; trust one hop for correct req.ip / rate-limiting
   app.set('trust proxy', 1);
 
   app.use(helmet({
@@ -95,6 +96,10 @@ async function startServer() {
   // Disable proxy buffering — helps Fly's HTTP/2 proxy read responses cleanly
   app.use((_req, res, next) => {
     res.setHeader('X-Accel-Buffering', 'no');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
     next();
   });
 
@@ -182,10 +187,19 @@ async function startServer() {
     message: { error: 'Too many sync requests. Please try again later.' },
   });
 
+  const geoipRateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 30,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { error: 'Too many requests. Please try again later.' },
+  });
+
   app.use('/api/orders/sync', syncRateLimiter);
   app.use('/api/profiles/sync', syncRateLimiter);
   app.use('/api/messages/sync', syncRateLimiter);
   app.use('/api/contacts/sync', syncRateLimiter);
+  app.use('/api/geoip', geoipRateLimiter);
 
   // ─────────────────────────────────────────────────────────────────────────
   // REQUEST LOGGING (only for /api)

@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import { supabaseAdmin, db } from '../lib/supabase.js';
-import { safeString, isValidEmail } from '../lib/validation.js';
+import { safeString, isValidEmail, MAX_LENGTHS } from '../lib/validation.js';
 import { deriveRole, getRequesterProfile } from '../lib/utils.js';
 
 const router = Router();
@@ -222,7 +222,7 @@ router.post('/become-expert', async (req: Request, res: Response) => {
     const country = safeString(req.body.country);
     const qualification = safeString(req.body.qualification);
     const subjects = Array.isArray(req.body.subjects) ? req.body.subjects : [];
-    const proposal = safeString(req.body.proposal);
+    const proposal = safeString(req.body.proposal, '', MAX_LENGTHS.proposal);
     const gpa = safeString(req.body.gpa);
     const documents = Array.isArray(req.body.documents) ? req.body.documents : [];
     const institution = safeString(req.body.institution);

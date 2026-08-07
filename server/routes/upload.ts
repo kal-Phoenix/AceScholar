@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
+import DOMPurify from 'isomorphic-dompurify';
 import { supabaseAdmin, supabaseUrl } from '../lib/supabase.js';
 import { safeString } from '../lib/validation.js';
 import { getRequesterProfile } from '../lib/utils.js';
@@ -45,20 +46,16 @@ async function uploadBase64FileToStorage(base64Data: string, fileName: string): 
   const storagePath = `uploads/${crypto.randomUUID()}.${ext}`;
   let buffer = Buffer.from(rawBase64, 'base64');
 
-  // Sanitize SVG uploads to prevent stored XSS
+  // Sanitize SVG uploads to prevent stored XSS — use DOMPurify (not regex)
   if (mimeType === 'image/svg+xml') {
-    let svgContent = buffer.toString('utf-8');
-    // Strip <script> tags and their content
-    svgContent = svgContent.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
-    // Strip <foreignObject> tags and their content
-    svgContent = svgContent.replace(/<foreignObject\b[^<]*(?:(?!<\/foreignObject>)<[^<]*)*<\/foreignObject>/gi, '');
-    // Strip event handler attributes (onclick, onload, onerror, etc.)
-    svgContent = svgContent.replace(/\son\w+\s*=\s*(?:"[^"]*"|'[^']*')/gi, '');
-    // Strip javascript: URIs
-    svgContent = svgContent.replace(/javascript\s*:/gi, '');
-    // Strip data: URIs in href/xlink:href (except safe ones)
-    svgContent = svgContent.replace(/(href|xlink:href)\s*=\s*(?:"data:[^"]*"|'data:[^']*')/gi, '');
-    buffer = Buffer.from(svgContent, 'utf-8');
+    const svgContent = buffer.toString('utf-8');
+    const clean = DOMPurify.sanitize(svgContent, {
+      USE_PROFILES: { svg: true, svgFilters: true },
+      ADD_TAGS: ['animate', 'animateTransform', 'set'],
+      FORBID_TAGS: ['script', 'foreignObject', 'iframe', 'object', 'embed', 'form', 'input', 'textarea', 'select', 'button'],
+      FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur', 'onsubmit'],
+    });
+    buffer = Buffer.from(clean, 'utf-8');
   }
 
   if (buffer.length > 10 * 1024 * 1024) {

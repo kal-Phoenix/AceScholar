@@ -23,34 +23,40 @@ router.post('/', async (req: Request, res: Response) => {
     if (!method) return res.status(400).json({ error: 'Payment method is required' });
     if (!account_details) return res.status(400).json({ error: 'Account details are required' });
 
-    // Retry loop to prevent TOCTOU race — re-fetch balance before insert
-    const MAX_RETRIES = 3;
-    let lastAvailable = 0;
+    // Race-condition-safe withdrawal: tight loop between balance check and insert.
+    // For true atomicity, a Supabase DB function with SELECT ... FOR UPDATE is needed.
+    const MAX_RETRIES = 5;
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      const { data: allOrders } = await db.from('orders').select('id, assigned_to');
+      // ── Fetch all data needed for balance calculation in one burst ──
+      const [{ data: allOrders }, { data: existingWithdrawals }] = await Promise.all([
+        db.from('orders').select('id, assigned_to'),
+        db.from('withdrawals')
+          .select('amount')
+          .eq('expert_email', requester.email)
+          .in('status', ['pending', 'approved']),
+      ]);
+
       const myOrderIds = (allOrders || [])
         .filter((o: any) => isOrderAccessibleToExpert(o, requester.email, requester.full_name))
         .map((o: any) => o.id);
 
-      const { data: payments } = myOrderIds.length > 0
+      const paymentsRes = myOrderIds.length > 0
         ? await db.from('payments').select('expert_amount').in('order_id', myOrderIds).eq('status', 'approved')
         : { data: [] };
 
-      const { data: withdrawals } = await db
-        .from('withdrawals')
-        .select('amount')
-        .eq('expert_email', requester.email)
-        .eq('status', 'approved');
+      const totalEarnings = (paymentsRes.data || [])
+        .reduce((s: number, p: any) => s + (p.expert_amount || 0), 0);
+      const totalWithdrawn = (existingWithdrawals || [])
+        .reduce((s: number, w: any) => s + (w.amount || 0), 0);
+      const available = totalEarnings - totalWithdrawn;
 
-      const totalEarnings = (payments || []).reduce((s: number, p: any) => s + (p.expert_amount || 0), 0);
-      const totalWithdrawn = (withdrawals || []).reduce((s: number, w: any) => s + (w.amount || 0), 0);
-      lastAvailable = totalEarnings - totalWithdrawn;
-
-      if (amount > lastAvailable) {
-        return res.status(400).json({ error: `Insufficient balance. Available: ${lastAvailable.toFixed(2)} ${currency}` });
+      if (amount > available) {
+        return res.status(400).json({
+          error: `Insufficient balance. Available: ${available.toFixed(2)} ${currency}`,
+        });
       }
 
-      // Try insert — if a concurrent withdrawal snuck in, retry
+      // ── Attempt insert — if another request snuck in, the balance will differ on retry ──
       const id = 'wd-' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
       const record = {
         id,
@@ -67,24 +73,30 @@ router.post('/', async (req: Request, res: Response) => {
 
       const { error } = await db.from('withdrawals').insert([record]);
       if (!error) {
-        // Notify admin
-        try {
-          const { data: admins } = await db.from('profiles').select('email').eq('role', 'admin');
-          if (admins && admins.length > 0) {
-            const notifications = admins.map((a: any) => ({
-              id: 'notif-' + crypto.randomUUID().replace(/-/g, '').substring(0, 16),
-              user_email: a.email,
-              type: 'withdrawal_request',
-              title: 'New Withdrawal Request',
-              message: `${requester.full_name} requested ${amount} ${currency} withdrawal via ${method}`,
-              read: false,
-              link: '/admin',
-              created_at: new Date().toISOString(),
-            }));
-            await db.from('notifications').insert(notifications);
-          }
-        } catch (_) { /* notification failure is non-fatal */ }
+        // Notify admin (fire-and-forget)
+        Promise.resolve().then(() =>
+          db.from('profiles').select('email').eq('role', 'admin').then(({ data: admins }) => {
+            if (admins && admins.length > 0) {
+              const notifications = admins.map((a: any) => ({
+                id: 'notif-' + crypto.randomUUID().replace(/-/g, '').substring(0, 16),
+                user_email: a.email,
+                type: 'withdrawal_request',
+                title: 'New Withdrawal Request',
+                message: `${requester.full_name} requested ${amount} ${currency} withdrawal via ${method}`,
+                read: false,
+                link: '/admin',
+                created_at: new Date().toISOString(),
+              }));
+              return db.from('notifications').insert(notifications);
+            }
+          })
+        ).catch(() => {});
         return res.status(201).json(record);
+      }
+
+      // Duplicate key or other insert error — retry
+      if (attempt === MAX_RETRIES - 1) {
+        return res.status(500).json({ error: 'Failed to create withdrawal request (concurrent conflict)' });
       }
     }
     return res.status(500).json({ error: 'Failed to create withdrawal request' });
