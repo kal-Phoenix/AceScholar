@@ -230,8 +230,13 @@ export default function App() {
     });
   }, [detectedLocation.loading, detectedLocation.country]);
 
-  const handleLogout = () => {
-    handleSetUser(null);
+  const handleLogout = async () => {
+    setSession(null);
+    setUser(null);
+    if (supabase) {
+      await supabase.auth.signOut({ scope: 'global' });
+    }
+    localStorage.clear();
     showToast('Signed out successfully.', 'success');
     setCurrentPage('home');
     window.scrollTo(0, 0);
