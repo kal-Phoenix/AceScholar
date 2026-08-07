@@ -1520,20 +1520,6 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    setPaymentMethodType('crypto');
-                                  }}
-                                  className={`p-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                                    paymentMethodType === 'crypto'
-                                      ? 'bg-amber-500/10 text-amber-400 border-amber-500'
-                                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
-                                  }`}
-                                >
-                                  Crypto
-                                  <span className="bg-emerald-500 text-slate-950 font-mono text-[9px] px-1 py-0.5 rounded font-extrabold">-5%</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
                                     setPaymentMethodType('card');
                                   }}
                                   className={`p-3 rounded-xl border text-xs font-bold transition-all text-center ${
@@ -1587,44 +1573,6 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                                       <span className="text-[9px] text-slate-500">Account No.</span>
                                     </div>
                                     <span className="block text-slate-400 text-[9px] mt-1">Account Name: <span className="text-white font-semibold">{paymentConfig.ethiopia.boa.accountName}</span></span>
-                                  </div>
-                                </div>
-                              )}
-
-                              {paymentMethodType === 'crypto' && paymentConfig?.crypto && (
-                                <div className="space-y-3">
-                                  <div className="flex justify-between items-center">
-                                    <h6 className="font-bold text-white uppercase tracking-wider text-[10px]">Crypto Payment Instructions</h6>
-                                    <span className="bg-emerald-500 text-slate-950 font-bold font-mono text-[9px] px-2 py-0.5 rounded uppercase">{paymentConfig.crypto.discountPercent}% Discount Applied</span>
-                                  </div>
-                                  <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800/80 flex justify-between items-center">
-                                    <div>
-                                      <span className="block text-slate-500 text-[9px]">Calculated Price ({paymentConfig.crypto.discountPercent}% Off)</span>
-                                      <strong className="text-emerald-400 font-mono text-base">
-                                        ${((selectedOrder.agreed_price || selectedOrder.total_amount || 100) * (1 - paymentConfig.crypto.discountPercent / 100)).toFixed(2)} USD
-                                      </strong>
-                                    </div>
-                                    <div className="text-right">
-                                      <span className="block text-slate-500 text-[9px]">Save Amount</span>
-                                      <strong className="text-slate-300 font-mono">
-                                        ${((selectedOrder.agreed_price || selectedOrder.total_amount || 100) * (paymentConfig.crypto.discountPercent / 100)).toFixed(2)} USD
-                                      </strong>
-                                    </div>
-                                  </div>
-                                  <p className="text-slate-300 leading-relaxed font-light mt-1">
-                                    Send the discounted amount to one of our verified crypto addresses below:
-                                  </p>
-                                  <div className="space-y-2 font-mono">
-                                    {paymentConfig.crypto.assets?.map((asset: any) =>
-                                      asset.networks.map((network: any) => (
-                                        <div key={`${asset.id}-${network.name}`} className="bg-slate-900 p-2.5 rounded border border-slate-800/80 flex items-center justify-between gap-2">
-                                          <div className="min-w-0 flex-1">
-                                            <span className="block text-slate-500 text-[9px]">{asset.icon || ''} {asset.name} ({asset.symbol}) — {network.name}</span>
-                                            <strong className="text-white text-[11px] truncate block select-all">{network.address}</strong>
-                                          </div>
-                                        </div>
-                                      ))
-                                    )}
                                   </div>
                                 </div>
                               )}

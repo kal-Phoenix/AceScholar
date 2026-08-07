@@ -106,7 +106,7 @@ export default function Order({ user, sessionRestored = true, selectedServiceTyp
   });
 
   const [paymentChoice, setPaymentChoice] = useState<'now' | 'delivery' | null>(null);
-  const [ethiopiaMethod, setEthiopiaMethod] = useState<'cbe' | 'telebirr' | 'boa' | 'crypto' | 'card'>('cbe');
+  const [ethiopiaMethod, setEthiopiaMethod] = useState<'cbe' | 'telebirr' | 'boa' | 'card'>('cbe');
   const [internationalMethod, setInternationalMethod] = useState<'crypto' | 'card'>('crypto');
   const [ethiopiaTxRef, setEthiopiaTxRef] = useState('');
   const [paymentScreenshot, setPaymentScreenshot] = useState<string>('');
@@ -745,7 +745,6 @@ export default function Order({ user, sessionRestored = true, selectedServiceTyp
                       { key: 'cbe', label: 'CBE', sub: 'Bank' },
                       { key: 'telebirr', label: 'Telebirr', sub: 'Mobile' },
                       { key: 'boa', label: 'BOA', sub: 'Bank' },
-                      { key: 'crypto', label: 'Crypto', sub: '-5%' },
                       { key: 'card', label: 'Card', sub: 'Visa/MC' },
                     ] as const).map(m => (
                       <button key={m.key} type="button" onClick={() => setEthiopiaMethod(m.key)}
@@ -779,14 +778,6 @@ export default function Order({ user, sessionRestored = true, selectedServiceTyp
                         <p className="font-bold text-slate-300">{paymentConfig.ethiopia.boa.accountName}</p>
                         <p className="text-amber-400 font-bold select-all text-xs">{paymentConfig.ethiopia.boa.accountNumber}</p>
                       </>
-                    )}
-                    {ethiopiaMethod === 'crypto' && paymentConfig?.crypto?.assets?.map((asset: any) =>
-                      asset.networks.map((network: any) => (
-                        <div key={`${asset.id}-${network.name}`}>
-                          <p className="font-bold text-slate-300">{asset.name} — {network.name}</p>
-                          <p className="text-amber-400 font-bold select-all text-[10px]">{network.address}</p>
-                        </div>
-                      ))
                     )}
                     {ethiopiaMethod === 'card' && paymentConfig?.card && (
                       <>
