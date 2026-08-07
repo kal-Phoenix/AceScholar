@@ -53,15 +53,15 @@ export default function App() {
     if (!supabase) { setSessionRestored(true); return; }
 
     // Fetch the authoritative role from the server (avoids trusting JWT user_metadata)
-    const fetchServerRole = async (): Promise<Profile['role']> => {
+    const fetchServerRole = async (): Promise<Profile['role'] | null> => {
       try {
         const res = await fetch('/api/profiles/me', { headers: await getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
           return data.role || 'client';
         }
-      } catch { /* fallback to JWT role */ }
-      return 'client';
+      } catch { /* server unreachable — preserve existing role */ }
+      return null;
     };
 
     // Immediately restore existing session
@@ -70,13 +70,13 @@ export default function App() {
         setSession(session);
         const u = session.user;
         const serverRole = await fetchServerRole();
-        setUser({
+        setUser(prev => ({
           id: u.id,
           email: u.email || '',
           full_name: u.user_metadata?.full_name || u.email?.split('@')[0] || '',
-          role: serverRole,
+          role: serverRole || prev?.role || 'client',
           created_at: u.created_at,
-        });
+        }));
       }
       setSessionRestored(true);
     }).catch(() => { setSessionRestored(true); });
@@ -87,13 +87,13 @@ export default function App() {
         setSession(session);
         const u = session.user;
         const serverRole = await fetchServerRole();
-        setUser({
+        setUser(prev => ({
           id: u.id,
           email: u.email || '',
           full_name: u.user_metadata?.full_name || u.email?.split('@')[0] || '',
-          role: serverRole,
+          role: serverRole || prev?.role || 'client',
           created_at: u.created_at,
-        });
+        }));
       } else if (_event === 'SIGNED_OUT') {
         setSession(null);
         setUser(null);
