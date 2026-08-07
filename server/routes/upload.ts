@@ -1,6 +1,5 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
-import DOMPurify from 'isomorphic-dompurify';
 import { supabaseAdmin, supabaseUrl } from '../lib/supabase.js';
 import { safeString } from '../lib/validation.js';
 import { getRequesterProfile } from '../lib/utils.js';
@@ -46,16 +45,15 @@ async function uploadBase64FileToStorage(base64Data: string, fileName: string): 
   const storagePath = `uploads/${crypto.randomUUID()}.${ext}`;
   let buffer = Buffer.from(rawBase64, 'base64');
 
-  // Sanitize SVG uploads to prevent stored XSS — use DOMPurify (not regex)
+  // Sanitize SVG uploads to prevent stored XSS
   if (mimeType === 'image/svg+xml') {
-    const svgContent = buffer.toString('utf-8');
-    const clean = DOMPurify.sanitize(svgContent, {
-      USE_PROFILES: { svg: true, svgFilters: true },
-      ADD_TAGS: ['animate', 'animateTransform', 'set'],
-      FORBID_TAGS: ['script', 'foreignObject', 'iframe', 'object', 'embed', 'form', 'input', 'textarea', 'select', 'button'],
-      FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur', 'onsubmit'],
-    });
-    buffer = Buffer.from(clean, 'utf-8');
+    let svgContent = buffer.toString('utf-8');
+    svgContent = svgContent.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+    svgContent = svgContent.replace(/<foreignObject\b[^<]*(?:(?!<\/foreignObject>)<[^<]*)*<\/foreignObject>/gi, '');
+    svgContent = svgContent.replace(/\son\w+\s*=\s*(?:"[^"]*"|'[^']*')/gi, '');
+    svgContent = svgContent.replace(/javascript\s*:/gi, '');
+    svgContent = svgContent.replace(/(href|xlink:href)\s*=\s*(?:"data:[^"]*"|'data:[^']*')/gi, '');
+    buffer = Buffer.from(svgContent, 'utf-8');
   }
 
   if (buffer.length > 10 * 1024 * 1024) {
