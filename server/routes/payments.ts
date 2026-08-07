@@ -85,12 +85,12 @@ router.post('/', async (req: Request, res: Response) => {
 
     const order = orderData as any;
 
-    // Verify the authenticated user owns this order
+    // Verify the authenticated user owns this order (admins can pay for any order)
     if (requester.role === 'client' &&
         order.client_email?.toLowerCase() !== requester.email.toLowerCase()) {
       return res.status(403).json({ error: 'You can only submit payments for your own orders' });
     }
-    // Experts cannot submit payments — only clients can
+    // Experts cannot submit payments — only clients and admins can
     if (requester.role === 'expert') {
       return res.status(403).json({ error: 'Experts cannot submit payments' });
     }
@@ -188,7 +188,7 @@ router.get('/', async (req: Request, res: Response) => {
     if (ordersErr) return res.status(500).json({ error: 'Failed to fetch orders' });
 
     const orderIds = (allOrders || [])
-      .filter((o: any) => isOrderAccessibleToExpert(o, requester.email, requester.full_name))
+      .filter((o: any) => isOrderAccessibleToExpert(o, requester.email))
       .map((o: any) => o.id);
     if (orderIds.length === 0) return res.json([]);
 

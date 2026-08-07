@@ -34,7 +34,7 @@ async function requireOrderAccess(
   if (requester.role === 'admin') {
     authorized = true;
   } else if (requester.role === 'expert') {
-    authorized = isOrderAccessibleToExpert(order, requester.email, requester.full_name);
+    authorized = isOrderAccessibleToExpert(order, requester.email);
   } else {
     authorized = typeof order.client_email === 'string' &&
       order.client_email.toLowerCase() === requester.email.toLowerCase();
@@ -99,7 +99,7 @@ router.get('/', async (req: Request, res: Response) => {
     if (ordErr) return res.status(500).json({ error: 'Failed to fetch orders' });
 
     const allowedIds = (allOrders || [])
-      .filter((o: any) => isOrderAccessibleToExpert(o, requester.email, requester.full_name))
+      .filter((o: any) => isOrderAccessibleToExpert(o, requester.email))
       .map((o: any) => o.id);
 
     if (allowedIds.length === 0) return res.json({ data: [], total: 0, page, limit });
@@ -187,7 +187,7 @@ router.post('/', async (req: Request, res: Response) => {
     if (requester.role === 'admin') {
       authorized = true;
     } else if (requester.role === 'expert') {
-      authorized = isOrderAccessibleToExpert(order, requester.email, requester.full_name);
+      authorized = isOrderAccessibleToExpert(order, requester.email);
     } else {
       authorized = typeof order.client_email === 'string' &&
         order.client_email.toLowerCase() === requester.email.toLowerCase();

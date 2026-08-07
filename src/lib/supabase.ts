@@ -127,7 +127,7 @@ export const fallbackDb = {
 
       // Expert: needs RLS policy (see supabase-expert-rls.sql)
       // Query unallocated + assigned orders, filter in JS
-      const fullName = user.user_metadata?.full_name || user.email?.split('@')[0] || '';
+      const expertEmail = user.email?.toLowerCase() || '';
 
       const { data: unallocated } = await supabase
         .from('orders')
@@ -138,7 +138,7 @@ export const fallbackDb = {
       const { data: assigned } = await supabase
         .from('orders')
         .select('*')
-        .eq('assigned_to', fullName)
+        .eq('assigned_to', expertEmail)
         .order('created_at', { ascending: false });
 
       // Deduplicate
@@ -148,11 +148,10 @@ export const fallbackDb = {
       }
       const all = Array.from(allMap.values());
 
-      // Filter: expert can see unallocated or assigned to them
+      // Filter: expert can see unallocated or assigned to them (email match only)
       const filtered = all.filter((o: Order) => {
         if (!o.assigned_to || o.assigned_to.trim() === '' || o.assigned_to === 'Unallocated') return true;
-        if (o.assigned_to.toLowerCase() === user.email?.toLowerCase()) return true;
-        if (o.assigned_to.toLowerCase().trim() === fullName.toLowerCase().trim()) return true;
+        if (o.assigned_to.toLowerCase().trim() === expertEmail) return true;
         return false;
       });
 

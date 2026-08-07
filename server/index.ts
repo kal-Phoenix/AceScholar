@@ -79,9 +79,9 @@ async function startServer() {
         res.header('Access-Control-Allow-Origin', origin);
         res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
         res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-        res.header('Access-Control-Allow-Credentials', 'true');
       }
-    } else {
+    } else if (process.env.NODE_ENV !== 'production') {
+      // Only allow wildcard in development — in production, requests without Origin are blocked
       res.header('Access-Control-Allow-Origin', '*');
       res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
       res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -166,11 +166,20 @@ async function startServer() {
     message: { error: 'Too many password reset attempts. Please try again later.' },
   });
 
+  const resendVerificationRateLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    limit: 3,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { error: 'Too many verification email requests. Please try again later.' },
+  });
+
   app.use(baseRateLimiter);
   app.use('/api/auth/login', loginRateLimiter);
   app.use('/api/auth/signup', signupRateLimiter);
   app.use('/api/auth/forgot-password', passwordResetRateLimiter);
   app.use('/api/auth/reset-password', passwordResetRateLimiter);
+  app.use('/api/auth/resend-verification', resendVerificationRateLimiter);
   app.use('/api/payments', sensitiveRateLimiter);
   app.use('/api/contacts', sensitiveRateLimiter);
   app.use('/api/messages', messageRateLimiter);

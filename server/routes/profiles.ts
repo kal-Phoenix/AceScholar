@@ -220,10 +220,7 @@ router.post('/', async (req: Request, res: Response) => {
 // POST become-expert
 router.post('/become-expert', async (req: Request, res: Response) => {
   try {
-    const authHeader = req.headers.authorization;
-    console.log('[become-expert] Auth header present:', !!authHeader, 'starts with Bearer:', authHeader?.startsWith('Bearer ') || false);
     const requester = await getRequesterProfile(req);
-    console.log('[become-expert] Requester:', requester ? requester.email : 'NULL');
     if (!requester) return res.status(401).json({ error: 'Authentication required' });
 
     const email = safeString(req.body.email);

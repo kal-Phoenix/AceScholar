@@ -26,21 +26,17 @@ export function deriveRole(email: string, storedRole?: string): 'admin' | 'clien
 
 /**
  * Check if an order is accessible to a given expert.
- * Matches by assigned_to name (exact match, case-insensitive) or by email.
- * exact match, case-insensitive) or by email.
+ * Matches by assigned_to email only (name-based matching is removed to prevent spoofing).
  */
 export function isOrderAccessibleToExpert(
   order: { assigned_to?: string; client_email?: string },
   expertEmail: string,
-  expertFullName: string
 ): boolean {
   if (!order.assigned_to || order.assigned_to.trim() === '' || order.assigned_to === 'Unallocated') {
     return true;
   }
-  // Exact email match (most reliable)
-  if (order.assigned_to.toLowerCase() === expertEmail.toLowerCase()) return true;
-  // Exact name match (case-insensitive, preserves spaces/punctuation)
-  if (order.assigned_to.toLowerCase().trim() === expertFullName.toLowerCase().trim()) return true;
+  // Email match only — prevents spoofing via display name
+  if (order.assigned_to.toLowerCase().trim() === expertEmail.toLowerCase().trim()) return true;
   return false;
 }
 

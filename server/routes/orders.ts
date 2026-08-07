@@ -114,7 +114,7 @@ router.get('/', async (req: Request, res: Response) => {
     const allOrders = Array.from(allOrdersMap.values());
 
     const filtered = allOrders.filter((o: any) =>
-      isOrderAccessibleToExpert(o, requester.email, requester.full_name)
+      isOrderAccessibleToExpert(o, requester.email)
     );
     const total = filtered.length;
     const paginated = filtered.slice(offset, offset + limit);
@@ -142,7 +142,7 @@ router.get('/:orderId', async (req: Request, res: Response) => {
     if (requester.role !== 'admin') {
       const isClient = typeof data.client_email === 'string' &&
         data.client_email.toLowerCase() === requester.email.toLowerCase();
-      const isExpert = requester.role === 'expert' && isOrderAccessibleToExpert(data, requester.email, requester.full_name);
+      const isExpert = requester.role === 'expert' && isOrderAccessibleToExpert(data, requester.email);
       if (!isClient && !isExpert) {
         return res.status(403).json({ error: 'Access denied to this order' });
       }
@@ -211,8 +211,10 @@ router.post('/', enforceBodyLimit(5 * 1024 * 1024), async (req: Request, res: Re
       status: (ALLOWED_ORDER_STATUSES as readonly string[]).includes(String(req.body.status ?? ''))
         ? req.body.status : 'pending',
       created_at: new Date().toISOString(),
-      payment_status: (ALLOWED_PAYMENT_STATUSES as readonly string[]).includes(String(req.body.payment_status ?? ''))
-        ? req.body.payment_status : 'pending',
+      payment_status: requester.role === 'admin'
+        ? ((ALLOWED_PAYMENT_STATUSES as readonly string[]).includes(String(req.body.payment_status ?? ''))
+          ? req.body.payment_status : 'pending')
+        : 'pending',
       payment_method: req.body.payment_method
         ? optionalText(req.body.payment_method, MAX_LENGTHS.general) || null : null,
       payment_screenshot: req.body.payment_screenshot ? safeString(req.body.payment_screenshot) : null,
@@ -247,9 +249,12 @@ router.post('/', enforceBodyLimit(5 * 1024 * 1024), async (req: Request, res: Re
       console.error('POST /api/orders insert error:', error.message);
       if (error.message?.toLowerCase().includes('client_id') || error.message?.toLowerCase().includes('foreign key')) {
         const { error: retryErr } = await db.from('orders').insert([{ ...dbRecord, client_id: null }]);
-        if (retryErr) return res.status(500).json({ error: 'Failed to create order: ' + retryErr.message });
+        if (retryErr) {
+          console.error('POST /api/orders retry insert error:', retryErr.message);
+          return res.status(500).json({ error: 'Failed to create order. Please try again.' });
+        }
       } else {
-        return res.status(500).json({ error: 'Failed to create order: ' + error.message });
+        return res.status(500).json({ error: 'Failed to create order. Please try again.' });
       }
     }
 
@@ -298,7 +303,7 @@ router.put('/:orderId', async (req: Request, res: Response) => {
     if (requester.role !== 'admin') {
       const isOwner = typeof currentOrderData.client_email === 'string' &&
         currentOrderData.client_email.toLowerCase() === requester.email.toLowerCase();
-      const isExpert = requester.role === 'expert' && isOrderAccessibleToExpert(currentOrderData, requester.email, requester.full_name);
+      const isExpert = requester.role === 'expert' && isOrderAccessibleToExpert(currentOrderData, requester.email);
       if (!isOwner && !isExpert) {
         return res.status(403).json({ error: 'Access denied: you cannot modify this order' });
       }

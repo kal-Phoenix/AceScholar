@@ -37,7 +37,7 @@ router.post('/', async (req: Request, res: Response) => {
       ]);
 
       const myOrderIds = (allOrders || [])
-        .filter((o: any) => isOrderAccessibleToExpert(o, requester.email, requester.full_name))
+        .filter((o: any) => isOrderAccessibleToExpert(o, requester.email))
         .map((o: any) => o.id);
 
       const paymentsRes = myOrderIds.length > 0
@@ -145,7 +145,7 @@ router.get('/balance', async (req: Request, res: Response) => {
     // Find payments through orders assigned to this expert
     const { data: allOrders } = await db.from('orders').select('id, assigned_to');
     const myOrderIds = (allOrders || [])
-      .filter((o: any) => isOrderAccessibleToExpert(o, email, requester.full_name))
+      .filter((o: any) => isOrderAccessibleToExpert(o, email))
       .map((o: any) => o.id);
 
     const { data: payments } = myOrderIds.length > 0

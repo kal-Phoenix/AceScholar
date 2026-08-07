@@ -35,7 +35,6 @@ router.get('/', async (req, res) => {
       const country = data.country_name || data.countryName || 'Ethiopia';
       const currency = data.currency || (country === 'Ethiopia' ? 'ETB' : 'USD');
       const city = data.city || data.cityName || 'Addis Ababa';
-      const ip = data.ip || data.ipAddress || rawIp;
 
       const exchangeRates: Record<string, { rate: number; symbol: string }> = {
         ETB: { rate: 120, symbol: 'Br' },
@@ -53,7 +52,6 @@ router.get('/', async (req, res) => {
         currency,
         symbol,
         exchangeRate: rate,
-        ip,
         city,
       });
     }
@@ -64,7 +62,6 @@ router.get('/', async (req, res) => {
       currency: 'ETB',
       symbol: 'Br',
       exchangeRate: 120,
-      ip: rawIp,
       city: 'Addis Ababa',
     });
   } catch (err) {
@@ -73,7 +70,6 @@ router.get('/', async (req, res) => {
       currency: 'ETB',
       symbol: 'Br',
       exchangeRate: 120,
-      ip: '',
       city: 'Addis Ababa',
     });
   }
