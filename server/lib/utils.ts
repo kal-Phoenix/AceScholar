@@ -171,7 +171,7 @@ export async function getRequesterProfile(req: Request): Promise<{
     const role = deriveRole(email, effectiveRole);
     return { id: userId, email, full_name: fullName, role, created_at: createdAt };
   } catch (e) {
-    console.error('getRequesterProfile: JWT decode failed:', e);
+    console.error('getRequesterProfile: JWT verification failed:', e);
     return null;
   }
 }

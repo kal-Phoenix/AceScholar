@@ -60,7 +60,6 @@ export default function Login({ setCurrentPage, setUser, showToast, redirectPage
       if (!user || !user.id) throw new Error('Authentication returned an empty user profile.');
 
       localStorage.clear();
-      setUser(user);
 
       if (user.access_token && user.refresh_token) {
         const session = {
@@ -79,6 +78,8 @@ export default function Login({ setCurrentPage, setUser, showToast, redirectPage
           });
         }
       }
+
+      setUser(user);
 
       if (showToast) showToast('Logged in successfully!', 'success');
 
