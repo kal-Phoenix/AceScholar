@@ -51,6 +51,11 @@ async function startServer() {
         objectSrc: ["'none'"],
       },
     } : false,
+    hsts: process.env.NODE_ENV === 'production' ? {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true,
+    } : false,
     frameguard: { action: 'deny' },
     crossOriginEmbedderPolicy: false,
   }));

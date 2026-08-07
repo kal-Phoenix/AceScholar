@@ -231,6 +231,13 @@ export default function App() {
   }, [detectedLocation.loading, detectedLocation.country]);
 
   const handleLogout = async () => {
+    // Revoke session server-side first
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: await getAuthHeaders(),
+      });
+    } catch { /* best-effort — client clears state regardless */ }
     setSession(null);
     setUser(null);
     if (supabase) {

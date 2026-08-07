@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
-import { supabaseAdmin, supabaseUrl } from '../lib/supabase.js';
+import { supabaseAdmin } from '../lib/supabase.js';
 import { safeString } from '../lib/validation.js';
 import { getRequesterProfile } from '../lib/utils.js';
 
@@ -22,7 +22,33 @@ const ALLOWED_EXTENSIONS = new Set([
   'doc', 'docx', 'xls', 'xlsx', 'txt', 'zip',
 ]);
 
-async function uploadBase64FileToStorage(base64Data: string, fileName: string): Promise<string> {
+// Magic-byte signatures for validating actual file content
+const MAGIC_BYTES: Record<string, Buffer[]> = {
+  'image/jpeg': [Buffer.from([0xFF, 0xD8, 0xFF])],
+  'image/png': [Buffer.from([0x89, 0x50, 0x4E, 0x47])],
+  'image/gif': [Buffer.from('GIF87a'), Buffer.from('GIF89a')],
+  'image/webp': [Buffer.from('RIFF')], // RIFF....WEBP
+  'application/pdf': [Buffer.from('%PDF')],
+  'application/zip': [Buffer.from([0x50, 0x4B, 0x03, 0x04])],
+  'application/msword': [Buffer.from([0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1])],
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': [Buffer.from('PK')],
+  'application/vnd.ms-excel': [Buffer.from([0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1])],
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': [Buffer.from('PK')],
+};
+
+function validateMagicBytes(buffer: Buffer, declaredMimeType: string): boolean {
+  // SVG is text-based, skip magic byte check
+  if (declaredMimeType === 'image/svg+xml') return true;
+  // TXT is text-based, skip
+  if (declaredMimeType === 'text/plain') return true;
+
+  const signatures = MAGIC_BYTES[declaredMimeType];
+  if (!signatures) return true; // No signature defined — allow (we already validated MIME type)
+
+  return signatures.some(sig => buffer.subarray(0, sig.length).equals(sig));
+}
+
+async function uploadBase64FileToStorage(base64Data: string, fileName: string, userId: string): Promise<string> {
   let mimeType = 'application/octet-stream';
   let rawBase64 = base64Data;
 
@@ -42,8 +68,13 @@ async function uploadBase64FileToStorage(base64Data: string, fileName: string): 
     throw new Error('File extension not allowed. Accepted: jpg, png, gif, webp, svg, pdf, doc, docx, xls, xlsx, txt, zip');
   }
 
-  const storagePath = `uploads/${crypto.randomUUID()}.${ext}`;
+  const storagePath = `${userId}/${crypto.randomUUID()}.${ext}`;
   let buffer = Buffer.from(rawBase64, 'base64');
+
+  // Validate file content matches declared MIME type (magic-byte check)
+  if (!validateMagicBytes(buffer, mimeType)) {
+    throw new Error('File content does not match declared type. Upload the actual file, not a renamed one.');
+  }
 
   // Sanitize SVG uploads to prevent stored XSS
   if (mimeType === 'image/svg+xml') {
@@ -71,11 +102,17 @@ async function uploadBase64FileToStorage(base64Data: string, fileName: string): 
     throw new Error('Failed to upload file to storage');
   }
 
-  const { data: urlData } = supabaseAdmin.storage
+  // Generate a signed URL (expires in 1 hour) instead of a permanent public URL
+  const { data: signedData, error: signedErr } = await supabaseAdmin.storage
     .from('order-files')
-    .getPublicUrl(storagePath);
+    .createSignedUrl(storagePath, 3600);
 
-  return urlData?.publicUrl || `${supabaseUrl}/storage/v1/object/public/order-files/${storagePath}`;
+  if (signedErr) {
+    console.error('Supabase Storage signed URL error:', signedErr.message);
+    throw new Error('Failed to generate file URL');
+  }
+
+  return signedData?.signedUrl || '';
 }
 
 router.post('/', async (req: Request, res: Response) => {
@@ -96,7 +133,7 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(413).json({ error: 'File too large. Maximum 15MB after encoding.' });
     }
 
-    const publicUrl = await uploadBase64FileToStorage(file, fileName);
+    const publicUrl = await uploadBase64FileToStorage(file, fileName, requester.id);
     res.json({ url: publicUrl, fileName });
   } catch (err: any) {
     console.error('POST /api/upload error:', err.message);

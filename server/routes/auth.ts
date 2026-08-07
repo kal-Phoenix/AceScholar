@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { supabase, db } from '../lib/supabase.js';
+import { supabase, supabaseAdmin, db } from '../lib/supabase.js';
 import { InputError, MAX_LENGTHS, requireEmail, requireText, enforceBodyLimit, safeString } from '../lib/validation.js';
 import { deriveRole } from '../lib/utils.js';
 
@@ -102,27 +102,10 @@ router.post('/login', enforceBodyLimit(10 * 1024), async (req: Request, res: Res
       created_at: user.created_at,
       whatsapp: profileRow?.whatsapp || user.user_metadata?.whatsapp || null,
       country: profileRow?.country || user.user_metadata?.country || null,
-      gpa: profileRow?.gpa || user.user_metadata?.gpa || null,
-      qualification: profileRow?.qualification || user.user_metadata?.qualification || null,
-      subjects: profileRow?.subjects || user.user_metadata?.subjects || null,
       expert_status: profileRow?.expert_status || user.user_metadata?.expert_status || null,
-      expert_signup_at: profileRow?.expert_signup_at || user.user_metadata?.expert_signup_at || null,
-      institution: profileRow?.institution || user.user_metadata?.institution || null,
-      graduation_year: profileRow?.graduation_year || user.user_metadata?.graduation_year || null,
-      field_of_study: profileRow?.field_of_study || user.user_metadata?.field_of_study || null,
-      software: profileRow?.software || user.user_metadata?.software || null,
-      experience: profileRow?.experience || user.user_metadata?.experience || null,
-      languages: profileRow?.languages || user.user_metadata?.languages || null,
-      portfolio_url: profileRow?.portfolio_url || user.user_metadata?.portfolio_url || null,
-      availability: profileRow?.availability || user.user_metadata?.availability || null,
-      referral: profileRow?.referral || user.user_metadata?.referral || null,
       access_token: data.session?.access_token || null,
       refresh_token: data.session?.refresh_token || null,
     };
-
-    // Include expert fields for the logged-in user's own profile
-    userProfile.expert_proposal = profileRow?.expert_proposal || user.user_metadata?.expert_proposal || null;
-    userProfile.expert_documents = profileRow?.expert_documents || user.user_metadata?.expert_documents || null;
 
     return res.json(userProfile);
   } catch (err) {
@@ -221,6 +204,38 @@ router.post('/reset-password', enforceBodyLimit(10 * 1024), async (req: Request,
   } catch (err) {
     console.error('POST /api/auth/reset-password exception:', err);
     res.status(500).json({ error: 'Internal server error during password reset' });
+  }
+});
+
+// POST logout — revokes the refresh token server-side so the session can't be reused
+router.post('/logout', async (req: Request, res: Response) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.json({ success: true });
+    }
+    const token = authHeader.slice(7);
+    if (!token) return res.json({ success: true });
+
+    // Decode the JWT to get the user ID for revocation
+    try {
+      const parts = token.split('.');
+      if (parts.length === 3) {
+        const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+        const payload = JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
+        const userId = payload.sub;
+        if (userId && supabaseAdmin) {
+          // Revoke all refresh tokens for this user (prevents session refresh)
+          await supabaseAdmin.auth.admin.signOut(userId);
+        }
+      }
+    } catch { /* best-effort revocation — client clears local state regardless */ }
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('POST /api/auth/logout exception:', err);
+    return res.json({ success: true }); // Always succeed — client clears state
   }
 });
 

@@ -137,7 +137,10 @@ router.get('/:orderId', async (req: Request, res: Response) => {
 
     const { data: msgs, error: msgErr } = await db
       .from('messages').select('*').eq('order_id', orderId).order('created_at', { ascending: true });
-    if (msgErr) return res.status(500).json({ error: msgErr.message });
+    if (msgErr) {
+      console.error('GET /api/messages error:', msgErr.message);
+      return res.status(500).json({ error: 'Failed to fetch messages' });
+    }
 
     // Infer recipient for legacy messages that lack the field.
     // Admin-sent messages default to 'student' (expert thread is separate).

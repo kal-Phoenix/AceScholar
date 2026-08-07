@@ -311,22 +311,22 @@ INSERT INTO storage.buckets (id, name, public)
 VALUES ('order-files', 'order-files', false)
 ON CONFLICT (id) DO UPDATE SET public = false;
 
--- Storage policies — private bucket, only authenticated users can read their own files
+-- Storage policies — private bucket, only file owners can read their own files
 DROP POLICY IF EXISTS "Public read access to order-files" ON storage.objects;
 DROP POLICY IF EXISTS "Authenticated users can read order-files" ON storage.objects;
-CREATE POLICY "Authenticated users can read order-files"
+CREATE POLICY "Users can read their own order files"
     ON storage.objects FOR SELECT
     USING (
         bucket_id = 'order-files'
-        AND auth.role() = 'authenticated'
+        AND (storage.foldername(name))[1] = auth.uid()::text
     );
 
 DROP POLICY IF EXISTS "Authenticated users can upload to order-files" ON storage.objects;
-CREATE POLICY "Authenticated users can upload to order-files"
+CREATE POLICY "Users can upload their own order files"
     ON storage.objects FOR INSERT
     WITH CHECK (
         bucket_id = 'order-files'
-        AND auth.role() = 'authenticated'
+        AND (storage.foldername(name))[1] = auth.uid()::text
     );
 
 -- NOTE: service-role key bypasses RLS. No permissive ALL policy needed.
