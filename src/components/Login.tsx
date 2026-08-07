@@ -59,12 +59,7 @@ export default function Login({ setCurrentPage, setUser, showToast, redirectPage
       const user = data;
       if (!user || !user.id) throw new Error('Authentication returned an empty user profile.');
 
-      // Clear any existing session before setting the new one
-      if (supabase) {
-        await supabase.auth.signOut({ scope: 'global' });
-      }
       localStorage.clear();
-
       setUser(user);
 
       if (user.access_token && user.refresh_token) {
