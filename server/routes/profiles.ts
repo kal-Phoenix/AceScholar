@@ -79,6 +79,24 @@ export function invalidateUserCache() {
   userCache.fetchedAt = 0;
 }
 
+// GET own profile (any authenticated user)
+router.get('/me', async (req: Request, res: Response) => {
+  try {
+    const requester = await getRequesterProfile(req);
+    if (!requester) return res.status(401).json({ error: 'Not authenticated' });
+    return res.json({
+      id: requester.id,
+      email: requester.email,
+      full_name: requester.full_name,
+      role: requester.role,
+      created_at: requester.created_at,
+    });
+  } catch (err) {
+    console.error('GET /api/profiles/me error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET all profiles (admin only)
 router.get('/', async (req: Request, res: Response) => {
   try {

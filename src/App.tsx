@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { PageType, Profile } from './types';
-import { supabase, setSession } from './lib/supabase';
+import { supabase, setSession, getAuthHeaders } from './lib/supabase';
 import Navbar from './components/Navbar';
 import Home from './components/Home';
 import Services from './components/Services';
@@ -52,16 +52,29 @@ export default function App() {
   useEffect(() => {
     if (!supabase) { setSessionRestored(true); return; }
 
+    // Fetch the authoritative role from the server (avoids trusting JWT user_metadata)
+    const fetchServerRole = async (): Promise<Profile['role']> => {
+      try {
+        const res = await fetch('/api/profiles/me', { headers: await getAuthHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          return data.role || 'client';
+        }
+      } catch { /* fallback to JWT role */ }
+      return 'client';
+    };
+
     // Immediately restore existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
         setSession(session);
         const u = session.user;
+        const serverRole = await fetchServerRole();
         setUser({
           id: u.id,
           email: u.email || '',
           full_name: u.user_metadata?.full_name || u.email?.split('@')[0] || '',
-          role: (u.user_metadata?.role as any) || 'client',
+          role: serverRole,
           created_at: u.created_at,
         });
       }
@@ -69,15 +82,16 @@ export default function App() {
     }).catch(() => { setSessionRestored(true); });
 
     // Keep session fresh via auth state changes (token refresh, signout, etc.)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
         setSession(session);
         const u = session.user;
+        const serverRole = await fetchServerRole();
         setUser({
           id: u.id,
           email: u.email || '',
           full_name: u.user_metadata?.full_name || u.email?.split('@')[0] || '',
-          role: (u.user_metadata?.role as any) || 'client',
+          role: serverRole,
           created_at: u.created_at,
         });
       } else if (_event === 'SIGNED_OUT') {
