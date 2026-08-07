@@ -136,27 +136,12 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// GET payment configuration (public — masked account details, full crypto addresses)
+// GET payment configuration (public — full account details)
 router.get('/config', (_req: Request, res: Response) => {
   const fullConfig = paymentConfig();
-  const mask = (s: string) => s.length > 8 ? s.slice(0, 4) + '****' + s.slice(-4) : '****';
-  const maskName = (s: string) => s.length > 2 ? s[0] + '*'.repeat(s.length - 1) : '**';
   res.json({
     providers: fullConfig.providers,
-    ethiopia: {
-      cbe: {
-        accountNumber: mask(fullConfig.ethiopia.cbe.accountNumber),
-        accountName: maskName(fullConfig.ethiopia.cbe.accountName),
-      },
-      telebirr: {
-        number: mask(fullConfig.ethiopia.telebirr.number),
-        name: maskName(fullConfig.ethiopia.telebirr.name),
-      },
-      boa: {
-        accountNumber: mask(fullConfig.ethiopia.boa.accountNumber),
-        accountName: maskName(fullConfig.ethiopia.boa.accountName),
-      },
-    },
+    ethiopia: fullConfig.ethiopia,
     crypto: {
       discountPercent: fullConfig.crypto.discountPercent,
       assets: fullConfig.crypto.assets.map(a => ({
@@ -164,10 +149,7 @@ router.get('/config', (_req: Request, res: Response) => {
         networks: a.networks.map(n => ({ name: n.name, address: n.address })),
       })),
     },
-    card: {
-      last4: fullConfig.card.cardNumber.slice(-4),
-      holderName: maskName(fullConfig.card.holderName),
-    },
+    card: fullConfig.card,
   });
 });
 
