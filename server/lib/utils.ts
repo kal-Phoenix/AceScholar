@@ -60,17 +60,31 @@ export function getAdminCutPercent(): number {
 }
 
 /**
- * Decode a Supabase JWT locally without making an outbound HTTP call.
- * Supabase JWTs are standard HS256 tokens — payload is base64url-encoded JSON.
- * We trust them because they are signed with SUPABASE_JWT_SECRET and
- * validated by Supabase before being issued to clients.
+ * Decode and VERIFY a Supabase JWT locally without making an outbound HTTP call.
+ * Supabase JWTs are standard HS256 tokens — we verify the HMAC-SHA256 signature
+ * using SUPABASE_JWT_SECRET to prevent token forgery.
  */
 function decodeJwtPayload(token: string): Record<string, any> | null {
   try {
     const parts = token.split('.');
     if (parts.length !== 3) return null;
+
+    const [headerB64, payloadB64, signatureB64] = parts;
+
+    // Verify HMAC-SHA256 signature
+    const secret = process.env.SUPABASE_JWT_SECRET;
+    if (!secret) {
+      console.error('SUPABASE_JWT_SECRET not set — rejecting token');
+      return null;
+    }
+    const expectedSig = crypto
+      .createHmac('sha256', secret)
+      .update(`${headerB64}.${payloadB64}`)
+      .digest('base64url');
+    if (signatureB64 !== expectedSig) return null;
+
     // base64url → base64 → Buffer → JSON
-    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const b64 = payloadB64.replace(/-/g, '+').replace(/_/g, '/');
     const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
     const json = Buffer.from(padded, 'base64').toString('utf8');
     const payload = JSON.parse(json);
