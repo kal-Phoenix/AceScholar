@@ -20,15 +20,33 @@ if (!supabaseUrl || !supabaseAnonKey) {
   process.exit(1);
 }
 
+// Custom fetch with 8-second timeout to prevent Supabase queries from hanging
+const fetchWithTimeout = async (url: string | URL, options: RequestInit = {}): Promise<Response> => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (err: any) {
+    if (err.name === 'AbortError') {
+      throw new Error('Supabase request timed out after 8 seconds');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
 // Public client (for auth operations like signIn, signUp)
 export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
   auth: { persistSession: false, autoRefreshToken: false },
+  global: { fetch: fetchWithTimeout as typeof fetch },
 });
 
 // Admin client (uses service-role key for backend operations)
 export const supabaseAdmin: SupabaseClient | null = supabaseServiceKey
   ? createClient(supabaseUrl, supabaseServiceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
+      global: { fetch: fetchWithTimeout as typeof fetch },
     })
   : null;
 

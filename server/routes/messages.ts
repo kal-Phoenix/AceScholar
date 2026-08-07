@@ -19,9 +19,16 @@ async function requireOrderAccess(
     return null;
   }
 
-  const { data: order, error: ordErr } = await db
-    .from('orders').select('*').eq('id', orderId).maybeSingle();
-  if (ordErr) {
+  let order: any;
+  try {
+    const result = await db
+      .from('orders').select('*').eq('id', orderId).maybeSingle();
+    order = result.data;
+    if (result.error) {
+      res.status(500).json({ error: 'Failed to fetch order' });
+      return null;
+    }
+  } catch (e) {
     res.status(500).json({ error: 'Failed to fetch order' });
     return null;
   }

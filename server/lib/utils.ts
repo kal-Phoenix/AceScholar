@@ -1,4 +1,4 @@
-import crypto from 'crypto';
+import { createHmac } from 'node:crypto';
 import { Request } from 'express';
 
 /**
@@ -56,35 +56,40 @@ export function getAdminCutPercent(): number {
 }
 
 /**
- * Decode and VERIFY a Supabase JWT locally without making an outbound HTTP call.
- * Supabase JWTs are standard HS256 tokens — we verify the HMAC-SHA256 signature
- * using SUPABASE_JWT_SECRET to prevent token forgery.
+ * Verify HMAC-SHA256 signature of a JWT.
+ * Extracted as exported standalone function so esbuild cannot tree-shake the crypto call.
  */
-function decodeJwtPayload(token: string): Record<string, any> | null {
+export function verifyJwtHmac(headerB64: string, payloadB64: string, signatureB64: string, secret: string): boolean {
+  const data = `${headerB64}.${payloadB64}`;
+  const expectedSig = createHmac('sha256', secret).update(data).digest('base64url');
+  return signatureB64 === expectedSig;
+}
+
+/**
+ * Decode and verify a Supabase JWT locally.
+ * HS256 signature is verified using SUPABASE_JWT_SECRET.
+ */
+export function decodeJwtPayload(token: string): Record<string, any> | null {
   try {
     const parts = token.split('.');
     if (parts.length !== 3) return null;
 
     const [headerB64, payloadB64, signatureB64] = parts;
 
-    // Verify HMAC-SHA256 signature
     const secret = process.env.SUPABASE_JWT_SECRET;
     if (!secret) {
-      console.error('SUPABASE_JWT_SECRET not set — rejecting token');
+      console.error('[SECURITY] SUPABASE_JWT_SECRET not set — rejecting token');
       return null;
     }
-    const expectedSig = crypto
-      .createHmac('sha256', secret)
-      .update(`${headerB64}.${payloadB64}`)
-      .digest('base64url');
-    if (signatureB64 !== expectedSig) return null;
+    if (!verifyJwtHmac(headerB64, payloadB64, signatureB64, secret)) {
+      console.warn('[SECURITY] JWT signature mismatch');
+      return null;
+    }
 
-    // base64url → base64 → Buffer → JSON
     const b64 = payloadB64.replace(/-/g, '+').replace(/_/g, '/');
     const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
     const json = Buffer.from(padded, 'base64').toString('utf8');
     const payload = JSON.parse(json);
-    // Verify the token hasn't expired
     if (payload.exp && Math.floor(Date.now() / 1000) > payload.exp) return null;
     return payload;
   } catch {
@@ -158,8 +163,11 @@ export async function getRequesterProfile(req: Request): Promise<{
     // Enrich role from profiles table (fast DB lookup, no external HTTP)
     try {
       const { db } = await import('./supabase.js');
-      const { data: profile } = await db
+      const profileQuery = db
         .from('profiles').select('role, expert_status, full_name, created_at').eq('id', userId).maybeSingle();
+      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000));
+      const result = await Promise.race([profileQuery, timeoutPromise]) as any;
+      const profile = result?.data ?? null;
       if (profile) {
         if (profile.role) effectiveRole = profile.role;
         if (profile.expert_status === 'approved' && effectiveRole !== 'expert') effectiveRole = 'expert';
