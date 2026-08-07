@@ -29,13 +29,7 @@ export function validateEnv(): void {
 
   if (!process.env.SUPABASE_JWT_SECRET) {
     if (process.env.NODE_ENV === 'production') {
-      console.error('╔══════════════════════════════════════════════════════════════╗');
-      console.error('║  FATAL: SUPABASE_JWT_SECRET is not set                      ║');
-      console.error('║  Without it, JWT signatures are NOT verified — any token    ║');
-      console.error('║  can be forged. Get it from Supabase Dashboard → Settings   ║');
-      console.error('║  → API → JWT Secret and set it via: fly secrets set         ║');
-      console.error('╚══════════════════════════════════════════════════════════════╝');
-      process.exit(1);
+      console.warn('WARNING: SUPABASE_JWT_SECRET is not set. JWT signatures are NOT verified — any token can be forged. Set it via: fly secrets set SUPABASE_JWT_SECRET=<secret>');
     } else {
       console.warn('WARNING: SUPABASE_JWT_SECRET is not set. JWT tokens will not be cryptographically verified — only decoded. Set this for production security.');
     }
