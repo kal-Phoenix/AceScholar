@@ -146,7 +146,7 @@ router.get('/config', (_req: Request, res: Response) => {
       discountPercent: fullConfig.crypto.discountPercent,
       assets: fullConfig.crypto.assets.map(a => ({
         ...a,
-        networks: a.networks.map(n => ({ name: n.name, address: '***' })),
+        networks: a.networks.map(n => ({ name: n.name, address: n.address })),
       })),
     },
     card: fullConfig.card,

@@ -31,7 +31,7 @@ router.get('/', async (req, res) => {
     }
 
     if (response && response.ok) {
-      const data = await response.json();
+      const data: any = await response.json();
       const country = data.country_name || data.countryName || 'Ethiopia';
       const currency = data.currency || (country === 'Ethiopia' ? 'ETB' : 'USD');
       const city = data.city || data.cityName || 'Addis Ababa';
@@ -84,7 +84,7 @@ router.get('/rates', async (_req, res) => {
   try {
     const response = await fetch('https://open.er-api.com/v6/latest/USD');
     if (response.ok) {
-      const data = await response.json();
+      const data: any = await response.json();
       if (data?.rates) {
         return res.json({
           ETB: data.rates.ETB ? parseFloat(data.rates.ETB.toFixed(2)) : FALLBACK.ETB,
