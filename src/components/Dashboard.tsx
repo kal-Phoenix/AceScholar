@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, FileText, Clock, AlertCircle, RefreshCw, Send, CheckCircle2, MessageSquare, Download, HelpCircle, GraduationCap, Check, X, Upload, Trash2, Paperclip, Sparkles, Mail } from 'lucide-react';
+import { LayoutDashboard, FileText, Clock, AlertCircle, RefreshCw, Send, CheckCircle2, MessageSquare, Download, HelpCircle, GraduationCap, Check, X, Upload, Trash2, Paperclip, Sparkles, Mail, Star } from 'lucide-react';
 import { PageType, Profile, Order as AcademicOrder, Message } from '../types';
 import { fallbackDb, getAuthHeaders } from '../lib/supabase';
 import {
@@ -21,8 +21,12 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
 
   const getUsdAmount = (budgetRange?: string): number => {
     if (!budgetRange) return 0;
-    const match = budgetRange.match(/\$(\d+)/);
-    return match ? parseInt(match[1]) : 0;
+    // Extract USD amount from format like "ETB 5,000 ETB (≈ $42 USD)" or "$150 USD (≈ $150 USD)"
+    const usdMatch = budgetRange.match(/\(\s*≈\s*\$\s*([\d,]+)/);
+    if (usdMatch) return parseInt(usdMatch[1].replace(/,/g, ''));
+    // Fallback: extract the first dollar amount
+    const match = budgetRange.match(/\$(\d[\d,]*)/);
+    return match ? parseInt(match[1].replace(/,/g, '')) : 0;
   };
 
   const requiresDownpayment = (order: AcademicOrder): boolean => {
@@ -43,6 +47,13 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
   const [showDisputeForm, setShowDisputeForm] = useState(false);
   const [disputeReason, setDisputeReason] = useState('');
   const [isSubmittingDispute, setIsSubmittingDispute] = useState(false);
+
+  // Rating state
+  const [showRatingForm, setShowRatingForm] = useState(false);
+  const [ratingScore, setRatingScore] = useState(5);
+  const [ratingComment, setRatingComment] = useState('');
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+  const [hasRated, setHasRated] = useState(false);
 
   // Payment proof states
   const [paymentMethodType, setPaymentMethodType] = useState<'ethiopia' | 'crypto' | 'card'>('ethiopia');
@@ -312,11 +323,14 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
 
   const fetchMessagesForOrder = async (orderId: string) => {
     try {
-      // Use order-specific endpoint to fetch only this order's messages (avoids fetching all)
       const thread = await fallbackDb.getMessagesByOrder(orderId);
-      // Sort older to newer
       thread.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-      setMessages(thread);
+      setMessages(prev => {
+        // Merge: keep any optimistically-added messages, replace with server data
+        const serverIds = new Set(thread.map(m => m.id));
+        const optimistic = prev.filter(m => !serverIds.has(m.id) && m.id.startsWith('msg-'));
+        return [...thread, ...optimistic];
+      });
     } catch (e) {
       console.error('Error fetching thread messages:', e);
     }
@@ -338,6 +352,8 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
   // Live poll: refresh messages every 5 seconds so student sees expert replies
   useEffect(() => {
     if (!selectedOrder) return;
+    setHasRated(false);
+    setShowRatingForm(false);
     const interval = setInterval(() => {
       fetchMessagesForOrder(selectedOrder.id);
     }, POLLING_INTERVAL_MS);
@@ -404,8 +420,12 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
         is_admin: false,
       });
 
-      if (sent) setMessages(prev => [...prev, sent]);
-      setTypedMessage('');
+      if (sent) {
+        setMessages(prev => [...prev, sent]);
+        setTypedMessage('');
+      } else {
+        if (showToast) showToast('Message failed to send. Please try again.', 'error');
+      }
 
     } catch (err) {
       console.error('Failed to send message:', err);
@@ -438,15 +458,20 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
 
     try {
       const newCount = currentCount + 1;
-      // Set new revision deadline: 48 hours from now for each revision
       const newDeadline = new Date(Date.now() + REVISION_DEADLINE_MS).toISOString();
 
-      const updated = await fallbackDb.updateOrder(selectedOrder.id, {
-        status: 'revision_requested',
-        revision_count: newCount,
-        revision_deadline: newDeadline,
-        internal_notes: `Revision #${newCount} Requested on ${new Date().toLocaleDateString()}: ${revisionGuidelines.slice(0, 80)}...`
+      const res = await fetch(`/api/orders/${selectedOrder.id}`, {
+        method: 'PUT',
+        headers: await getAuthHeaders(),
+        body: JSON.stringify({
+          status: 'revision_requested',
+          revision_count: newCount,
+          revision_deadline: newDeadline,
+          internal_notes: `Revision #${newCount} Requested on ${new Date().toLocaleDateString()}: ${revisionGuidelines}`,
+        }),
       });
+
+      const updated = res.ok ? await res.json() : null;
 
       if (updated) {
         setOrders(prev => prev.map(o => o.id === selectedOrder.id ? updated : o));
@@ -469,11 +494,17 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
 
     setIsSubmittingDispute(true);
     try {
-      const updated = await fallbackDb.updateOrder(selectedOrder.id, {
-        dispute_status: 'open',
-        dispute_reason: disputeReason.trim(),
-        dispute_created_at: new Date().toISOString(),
+      const res = await fetch(`/api/orders/${selectedOrder.id}`, {
+        method: 'PUT',
+        headers: await getAuthHeaders(),
+        body: JSON.stringify({
+          dispute_status: 'open',
+          dispute_reason: disputeReason.trim(),
+          dispute_created_at: new Date().toISOString(),
+        }),
       });
+
+      const updated = res.ok ? await res.json() : null;
 
       if (updated) {
         setOrders(prev => prev.map(o => o.id === selectedOrder.id ? updated : o));
@@ -489,6 +520,33 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
       if (showToast) showToast('Failed to submit dispute.', 'error');
     } finally {
       setIsSubmittingDispute(false);
+    }
+  };
+
+  const handleSubmitRating = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedOrder || !user) return;
+
+    setIsSubmittingRating(true);
+    try {
+      const result = await fallbackDb.submitRating({
+        order_id: selectedOrder.id,
+        score: ratingScore,
+        comment: ratingComment.trim() || undefined,
+      });
+
+      if (result) {
+        setHasRated(true);
+        setShowRatingForm(false);
+        if (showToast) showToast('Thank you for your feedback!', 'success');
+      } else {
+        if (showToast) showToast('Failed to submit rating. You may have already rated this order.', 'error');
+      }
+    } catch (e) {
+      console.error('Failed to submit rating:', e);
+      if (showToast) showToast('Failed to submit rating.', 'error');
+    } finally {
+      setIsSubmittingRating(false);
     }
   };
 
@@ -526,7 +584,8 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
         body: JSON.stringify({
           order_id: selectedOrder.id,
           payment_screenshot: screenshotUrl,
-          payment_method_type: paymentMethodType
+          payment_method_type: paymentMethodType,
+          payment_account: paymentMethodType === 'ethiopia' ? ethiopianBank : undefined,
         })
       });
 
@@ -555,28 +614,28 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
         return (
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
             <CheckCircle2 className="w-3 h-3 mr-1" />
-            Complete & Delivered
+            Delivered
           </span>
         );
       case 'in_progress':
         return (
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/15 text-blue-400 border border-blue-500/30">
             <Clock className="w-3 h-3 mr-1 animate-pulse" />
-            Specialist Writing
+            In Progress
           </span>
         );
       case 'under_review':
         return (
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/15 text-purple-400 border border-purple-500/30">
             <Clock className="w-3 h-3 mr-1" />
-            Under Internal QA review
+            Under Review
           </span>
         );
       case 'revision_requested':
         return (
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30 animate-pulse">
             <Clock className="w-3 h-3 mr-1" />
-            Revision Pending
+            Revision Requested
           </span>
         );
       case 'pending':
@@ -584,7 +643,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
         return (
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-500/15 text-slate-400 border border-slate-500/30">
             <HelpCircle className="w-3 h-3 mr-1" />
-            Reviewing Prompt Spec
+            Pending
           </span>
         );
     }
@@ -822,7 +881,8 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               {orders.map((o) => {
                 const hoursLeft = (new Date(o.deadline).getTime() - Date.now()) / HOURS_DIVISOR;
-                const isUrgent = hoursLeft < 24 && o.status !== 'delivered';
+                const isOverdue = hoursLeft < 0 && o.status !== 'delivered';
+                const isUrgent = !isOverdue && hoursLeft < 24 && o.status !== 'delivered';
                 const hasScreenshots = (o.admin_screenshots?.length || 0) > 0;
 
                 const progressPercent =
@@ -834,10 +894,10 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
 
                 const statusLabel =
                   o.status === 'delivered' ? 'Delivered' :
-                  o.status === 'under_review' ? 'Quality Review' :
-                  o.status === 'in_progress' ? 'Expert Writing' :
-                  o.status === 'revision_requested' ? 'Revision in Progress' :
-                  o.payment_status === 'approved' ? 'Awaiting Expert' : 'Order Received';
+                  o.status === 'under_review' ? 'Under Review' :
+                  o.status === 'in_progress' ? 'In Progress' :
+                  o.status === 'revision_requested' ? 'Revision Requested' :
+                  o.payment_status === 'approved' ? 'Awaiting Expert' : 'Pending';
 
                 return (
                   <div
@@ -847,6 +907,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                       o.status === 'delivered' ? 'border-emerald-500/30' :
                       o.status === 'under_review' ? 'border-purple-500/30' :
                       o.status === 'in_progress' ? 'border-blue-500/20' :
+                      isOverdue ? 'border-red-600/50' :
                       isUrgent ? 'border-rose-500/30 animate-pulse' :
                       'border-slate-800/90'
                     }`}
@@ -856,6 +917,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                       o.status === 'delivered' ? 'bg-emerald-500' :
                       o.status === 'under_review' ? 'bg-purple-500' :
                       o.status === 'in_progress' ? 'bg-blue-500' :
+                      isOverdue ? 'bg-red-600' :
                       isUrgent ? 'bg-rose-500' : 'bg-amber-500/30'
                     }`} />
 
@@ -909,8 +971,9 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                         </div>
                         <div className="text-right">
                           <span className="block text-[9px] text-slate-500 uppercase tracking-wider font-semibold">Deadline</span>
-                          <span className={`font-mono font-medium ${isUrgent ? 'text-rose-400' : 'text-slate-300'}`}>
+                          <span className={`font-mono font-medium ${isOverdue ? 'text-red-500 font-bold' : isUrgent ? 'text-rose-400' : 'text-slate-300'}`}>
                             {new Date(o.deadline).toLocaleDateString()}
+                            {isOverdue && ' (Overdue)'}
                           </span>
                         </div>
                       </div>
@@ -1016,11 +1079,11 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                       <h4 className="text-xs font-extrabold text-slate-400 uppercase tracking-widest font-mono">Live Timeline Status</h4>
                       <span className="text-xs font-semibold text-slate-400">
                         Current Status: <span className="text-amber-400 font-bold">{
-                          selectedOrder.status === 'delivered' ? 'Complete & Delivered' :
-                          selectedOrder.status === 'under_review' ? 'In Quality Review' :
-                          selectedOrder.status === 'revision_requested' ? 'Revision in Progress' :
-                          selectedOrder.status === 'in_progress' ? 'In Expert Writing' :
-                          'Reviewing Project Specs'
+                          selectedOrder.status === 'delivered' ? 'Delivered' :
+                          selectedOrder.status === 'under_review' ? 'Under Review' :
+                          selectedOrder.status === 'revision_requested' ? 'Revision Requested' :
+                          selectedOrder.status === 'in_progress' ? 'In Progress' :
+                          'Pending'
                         }</span>
                       </span>
                     </div>
@@ -1332,7 +1395,7 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                             </div>
                           )}
 
-                          {selectedOrder.delivery_url && selectedOrder.payment_status === 'approved' && (
+                          {selectedOrder.delivery_url && selectedOrder.delivery_released && (
                             <div className="px-5 py-3 border-t border-slate-800/60 bg-emerald-500/5">
                               <a
                                 href={selectedOrder.delivery_url}
@@ -1878,6 +1941,80 @@ export default function Dashboard({ user, setCurrentPage, showToast, setUser }: 
                               {selectedOrder.dispute_resolution && (
                                 <p className="text-slate-300 mt-1">{selectedOrder.dispute_resolution}</p>
                               )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Rating section - only for delivered orders */}
+                        {selectedOrder.status === 'delivered' && !hasRated && (
+                          <div className="pt-2 border-t border-slate-800/60">
+                            {!showRatingForm ? (
+                              <div className="flex justify-between items-center text-xs text-slate-400">
+                                <span>How was the delivered work?</span>
+                                <button
+                                  onClick={() => setShowRatingForm(true)}
+                                  className="text-amber-400 hover:text-amber-300 font-bold underline transition-all cursor-pointer"
+                                >
+                                  Rate Expert
+                                </button>
+                              </div>
+                            ) : (
+                              <form onSubmit={handleSubmitRating} className="bg-slate-950 border border-amber-500/20 p-4 rounded-xl space-y-4 animate-in slide-in-from-top-2 duration-150">
+                                <div className="space-y-1">
+                                  <h6 className="text-xs font-bold text-amber-400">Rate Your Expert</h6>
+                                  <p className="text-[11px] text-slate-400">Your feedback helps other students find the best experts.</p>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  {[1, 2, 3, 4, 5].map((star) => (
+                                    <button
+                                      key={star}
+                                      type="button"
+                                      onClick={() => setRatingScore(star)}
+                                      className="cursor-pointer"
+                                    >
+                                      <Star
+                                        className={`h-6 w-6 transition-colors ${
+                                          star <= ratingScore
+                                            ? 'text-amber-400 fill-amber-400'
+                                            : 'text-slate-600 hover:text-slate-500'
+                                        }`}
+                                      />
+                                    </button>
+                                  ))}
+                                  <span className="text-xs text-slate-400 ml-2">{ratingScore}/5</span>
+                                </div>
+                                <textarea
+                                  rows={2}
+                                  value={ratingComment}
+                                  onChange={(e) => setRatingComment(e.target.value)}
+                                  placeholder="Optional: share your experience..."
+                                  className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-lg py-2.5 px-3.5 text-white text-xs outline-none transition-colors resize-none font-light leading-relaxed"
+                                ></textarea>
+                                <div className="flex justify-end gap-2.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowRatingForm(false)}
+                                    className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-400 rounded-lg text-xs transition-colors cursor-pointer"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    type="submit"
+                                    disabled={isSubmittingRating}
+                                    className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-[#0F172A] font-bold rounded-lg text-xs transition-colors cursor-pointer disabled:opacity-50"
+                                  >
+                                    {isSubmittingRating ? 'Submitting...' : 'Submit Rating'}
+                                  </button>
+                                </div>
+                              </form>
+                            )}
+                          </div>
+                        )}
+                        {hasRated && (
+                          <div className="pt-2 border-t border-slate-800/60">
+                            <div className="flex items-center gap-2 text-xs text-amber-400">
+                              <Star className="h-4 w-4 fill-amber-400" />
+                              <span className="font-bold">You have already rated this order.</span>
                             </div>
                           </div>
                         )}

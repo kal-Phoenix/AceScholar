@@ -270,6 +270,13 @@ export const fallbackDb = {
         'agreed_price', 'preview_url', 'preview_name', 'payment_awaiting',
         'payment_method_type', 'crypto_discount_applied', 'delivery_released',
         'admin_screenshots', 'total_amount', 'currency',
+        // Payment account (which bank/account received the payment)
+        'payment_account',
+        // Revision fields
+        'revision_count', 'revision_deadline', 'max_revisions',
+        // Dispute fields
+        'dispute_status', 'dispute_reason', 'dispute_created_at',
+        'dispute_resolved_at', 'dispute_resolution',
       ]);
       const safe: Record<string, any> = {};
       for (const [k, v] of Object.entries(updates)) {

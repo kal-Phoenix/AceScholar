@@ -279,7 +279,11 @@ export default function Expert({ user, setCurrentPage, showToast, setUser, detec
     try {
       const thread = await fallbackDb.getMessagesByOrder(orderId);
       thread.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-      setMessages(thread);
+      setMessages(prev => {
+        const serverIds = new Set(thread.map(m => m.id));
+        const optimistic = prev.filter(m => !serverIds.has(m.id) && m.id.startsWith('msg-'));
+        return [...thread, ...optimistic];
+      });
     } catch (e) {
       console.error('Error fetching messages:', e);
     }
@@ -299,10 +303,13 @@ export default function Expert({ user, setCurrentPage, showToast, setUser, detec
         is_admin: false,
       });
 
-      if (sent) setMessages(prev => [...prev, sent]);
-      setTypedMessage('');
-
-      if (showToast) showToast('Message sent.', 'success');
+      if (sent) {
+        setMessages(prev => [...prev, sent]);
+        setTypedMessage('');
+        if (showToast) showToast('Message sent.', 'success');
+      } else {
+        if (showToast) showToast('Message failed to send. Please try again.', 'error');
+      }
     } catch (e) {
       console.error(e);
       if (showToast) showToast('Could not send message.', 'error');
@@ -365,13 +372,13 @@ export default function Expert({ user, setCurrentPage, showToast, setUser, detec
   const getStatusBadge = (status: AcademicOrder['status']) => {
     switch (status) {
       case 'pending':
-        return <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">Allocation Pending</span>;
+        return <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">Pending</span>;
       case 'in_progress':
-        return <span className="bg-sky-500/10 text-sky-400 border border-sky-500/20 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">Active Drafting</span>;
+        return <span className="bg-sky-500/10 text-sky-400 border border-sky-500/20 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">In Progress</span>;
       case 'under_review':
-        return <span className="bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">Review Phase</span>;
+        return <span className="bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">Under Review</span>;
       case 'delivered':
-        return <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">Completed Solution</span>;
+        return <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">Delivered</span>;
       case 'revision_requested':
         return <span className="bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">Revision Requested</span>;
       default:
@@ -619,8 +626,9 @@ export default function Expert({ user, setCurrentPage, showToast, setUser, detec
                   const netUSD = grossUSD ? (grossUSD * 0.9).toFixed(0) : null;
                   // Deadline urgency
                   const hoursUntilDeadline = (new Date(order.deadline).getTime() - Date.now()) / HOURS_DIVISOR;
-                  const isUrgent = hoursUntilDeadline < 24;
-                  const isSoon = hoursUntilDeadline < 72;
+                  const isOverdue = hoursUntilDeadline < 0 && order.status !== 'delivered';
+                  const isUrgent = !isOverdue && hoursUntilDeadline < 24;
+                  const isSoon = !isOverdue && hoursUntilDeadline < 72;
                   
                   return (
                     <div
@@ -640,6 +648,12 @@ export default function Expert({ user, setCurrentPage, showToast, setUser, detec
                       }`}
                     >
                       {/* Urgency strip */}
+                      {activeTab === 'available' && isOverdue && (
+                        <div className="bg-red-600/20 border-b border-red-600/30 px-3 py-1 flex items-center gap-1.5">
+                          <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+                          <span className="text-[9px] font-extrabold text-red-400 uppercase tracking-wider">OVERDUE — Past deadline</span>
+                        </div>
+                      )}
                       {activeTab === 'available' && isUrgent && (
                         <div className="bg-rose-500/20 border-b border-rose-500/30 px-3 py-1 flex items-center gap-1.5">
                           <span className="h-1.5 w-1.5 rounded-full bg-rose-400 animate-pulse" />

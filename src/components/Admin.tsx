@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ShieldCheck, FileText, Check, Trash2, Mail, Users, RefreshCw, Clock, Upload, Download, X, Sparkles, Paperclip, Coins, DollarSign, TrendingUp, Copy, MessageSquare, Send, BarChart3, Star, ArrowDownToLine, CheckCircle } from 'lucide-react';
 import { PageType, Profile, Order as AcademicOrder, Message, ContactMessage, Payment, Withdrawal, Rating } from '../types';
 import { fallbackDb, getAuthHeaders } from '../lib/supabase';
-import { POLLING_INTERVAL_MS, REVISION_DEADLINE_MS, DEFAULT_EXCHANGE_RATES } from '../lib/constants';
+import { POLLING_INTERVAL_MS, REVISION_DEADLINE_MS, HOURS_DIVISOR, DEFAULT_EXCHANGE_RATES } from '../lib/constants';
 import NotificationBell from './NotificationBell';
 
 interface AdminProps {
@@ -202,7 +202,11 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
     try {
       const thread = await fallbackDb.getMessagesByOrder(orderId);
       thread.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-      setMessages(thread);
+      setMessages(prev => {
+        const serverIds = new Set(thread.map(m => m.id));
+        const optimistic = prev.filter(m => !serverIds.has(m.id) && m.id.startsWith('msg-'));
+        return [...thread, ...optimistic];
+      });
     } catch (e) {
       console.error('Error fetching thread messages:', e);
     }
@@ -236,12 +240,11 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
     }
   }, [selectedOrder]);
 
-  const handleAcceptExpertApplicant = async (_applicantEmail: string, applicantName: string) => {
+  const handleAcceptExpertApplicant = async (applicantEmail: string, applicantName: string) => {
     if (!selectedOrder) return;
     try {
-      // Use targeted PUT endpoint instead of bulk sync
       const updatedOrder = await fallbackDb.updateOrder(selectedOrder.id, {
-        assigned_to: applicantName,
+        assigned_to: applicantEmail,
         expert_accepted: true,
         status: 'in_progress',
       });
@@ -277,8 +280,21 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
 
     setIsSubmittingDelivery(true);
     try {
+      // Upload the delivery file to storage; fall back to base64 for small files
+      let deliveryFileUrl: string | undefined;
+      if (deliveryFileContent) {
+        const uploadedUrl = await fallbackDb.uploadFile(deliveryFileContent, deliveryFileName);
+        if (uploadedUrl) {
+          deliveryFileUrl = uploadedUrl;
+        } else if (deliveryFileContent.length < 5 * 1024 * 1024) {
+          // Fallback: store small files as base64 inline
+          deliveryFileUrl = deliveryFileContent;
+        } else {
+          throw new Error('File too large to store inline and upload failed');
+        }
+      }
+
       const isAlreadyApproved = selectedOrder.payment_status === 'approved';
-      // Set revision deadline to 48 hours from now
       const revisionDeadline = new Date(Date.now() + REVISION_DEADLINE_MS).toISOString();
 
       const res = await fetch(`/api/orders/${selectedOrder.id}`, {
@@ -287,7 +303,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
         body: JSON.stringify({
           status: 'delivered',
           delivery_name: deliveryFileName,
-          delivery_url: deliveryFileContent || undefined,
+          delivery_url: deliveryFileUrl,
           delivery_released: isAlreadyApproved,
           revision_deadline: revisionDeadline,
           revision_count: selectedOrder.revision_count || 0,
@@ -441,8 +457,12 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
         recipient,
       });
 
-      if (sent) setMessages(prev => [...prev, sent]);
-      setTypedMessage('');
+      if (sent) {
+        setMessages(prev => [...prev, sent]);
+        setTypedMessage('');
+      } else {
+        if (showToast) showToast('Message failed to send. Please try again.', 'error');
+      }
     } catch (err) {
       console.error('Failed to send message:', err);
       if (showToast) showToast('Failed to deliver message.', 'error');
@@ -504,26 +524,26 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
       case 'in_progress':
         return (
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/15 text-blue-400 border border-blue-500/30">
-            Writing
+            In Progress
           </span>
         );
       case 'under_review':
         return (
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/15 text-purple-400 border border-purple-500/30">
-            In QA Review
+            Under Review
           </span>
         );
       case 'revision_requested':
         return (
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30 animate-pulse">
-            Revision Needed
+            Revision Requested
           </span>
         );
       case 'pending':
       default:
         return (
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-500/15 text-slate-400 border border-slate-500/30">
-            Unallocated
+            Pending
           </span>
         );
     }
@@ -738,6 +758,8 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                 <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
                   {orders.map((o) => {
                     const isSelected = selectedOrder?.id === o.id;
+                    const hoursLeft = o.deadline ? (new Date(o.deadline).getTime() - Date.now()) / HOURS_DIVISOR : null;
+                    const isOverdue = hoursLeft !== null && hoursLeft < 0 && o.status !== 'delivered';
                     return (
                       <div
                         key={o.id}
@@ -775,6 +797,14 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                             <h4 className="text-xs sm:text-[13px] font-bold text-white line-clamp-1">{o.subject}</h4>
                             <p className="text-[10px] text-slate-400 font-light truncate">{o.client_name}</p>
                           </div>
+
+                          {o.deadline && (
+                            <div className={`text-[9px] font-mono ${isOverdue ? 'text-red-400 font-bold' : hoursLeft !== null && hoursLeft < 24 ? 'text-amber-400' : 'text-slate-500'}`}>
+                              Due: {new Date(o.deadline).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                              {isOverdue && ' (OVERDUE)'}
+                              {!isOverdue && hoursLeft !== null && hoursLeft < 24 && ` (${Math.round(hoursLeft)}h left)`}
+                            </div>
+                          )}
 
                           <div className="flex justify-between items-center text-[10px] border-t border-slate-800/40 pt-2">
                             <span className={`font-light ${o.assigned_to ? 'text-emerald-400/80' : 'text-slate-500'}`}>
@@ -907,6 +937,14 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                               {selectedOrder.payment_method_type || selectedOrder.payment_method || 'MANUAL'}
                             </strong>
                           </div>
+                          {selectedOrder.payment_account && (
+                            <div>
+                              <span className="block text-[10px] text-slate-500 uppercase font-mono">Bank / Account</span>
+                              <strong className="text-white uppercase">
+                                {selectedOrder.payment_account}
+                              </strong>
+                            </div>
+                          )}
                           <div>
                             <span className="block text-[10px] text-slate-500 uppercase font-mono">Agreed Price</span>
                             <strong className="text-amber-400 font-mono">
@@ -970,7 +1008,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                         </div>
                         <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                           {selectedOrder.applicants.map((applicant, idx) => {
-                            const isAccepted = selectedOrder.expert_accepted && selectedOrder.assigned_to === applicant.expert_name;
+                            const isAccepted = selectedOrder.expert_accepted && selectedOrder.assigned_to === applicant.expert_email;
                             return (
                             <div
                               key={idx}
@@ -2113,7 +2151,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 border-b border-slate-800">
               <div className="flex items-center gap-2">
-                {selectedOrder?.expert_accepted && selectedOrder?.assigned_to === selectedApplicantProfile.expert_name ? (
+                {selectedOrder?.expert_accepted && selectedOrder?.assigned_to === selectedApplicantProfile.expert_email ? (
                   <>
                     <CheckCircle className="h-4 w-4 text-emerald-400" />
                     <h3 className="text-sm font-bold text-emerald-300">Accepted Expert</h3>
@@ -2191,7 +2229,7 @@ export default function Admin({ user, setCurrentPage, showToast }: AdminProps) {
                 </div>
               )}
               <div className="flex gap-2 pt-2 border-t border-slate-800">
-                {selectedOrder?.expert_accepted && selectedOrder?.assigned_to === selectedApplicantProfile.expert_name ? (
+                {selectedOrder?.expert_accepted && selectedOrder?.assigned_to === selectedApplicantProfile.expert_email ? (
                   <span className="flex-1 bg-emerald-500/20 text-emerald-400 font-extrabold py-2 px-3 rounded-lg text-xs flex items-center justify-center gap-1.5 border border-emerald-500/30 cursor-default">
                     <CheckCircle className="h-4 w-4" />
                     <span>Already Assigned</span>

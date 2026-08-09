@@ -71,6 +71,7 @@ export interface Order {
   preview_name?: string;
   payment_awaiting?: boolean;
   payment_method_type?: 'bank_transfer' | 'crypto' | 'card';
+  payment_account?: string;
   crypto_discount_applied?: boolean;
   delivery_released?: boolean;
   // Expert submission for admin review

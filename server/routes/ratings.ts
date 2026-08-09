@@ -57,24 +57,17 @@ router.post('/', async (req: Request, res: Response) => {
     // Notify expert
     if ((order as any).assigned_to) {
       const notifId = 'notif-' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
-      // Get expert email from profile
-      const { data: expertProfile } = await db
-        .from('profiles')
-        .select('email')
-        .eq('full_name', (order as any).assigned_to)
-        .maybeSingle();
-      if (expertProfile) {
-        await db.from('notifications').insert({
-          id: notifId,
-          user_email: (expertProfile as any).email,
-          type: 'new_rating',
-          title: 'New Rating Received',
-          message: `${requester.full_name} gave you ${score}/5 stars for order ${order_id}`,
-          read: false,
-          link: '/expert',
-          created_at: new Date().toISOString(),
-        });
-      }
+      const expertEmail = (order as any).assigned_to;
+      await db.from('notifications').insert({
+        id: notifId,
+        user_email: expertEmail,
+        type: 'new_rating',
+        title: 'New Rating Received',
+        message: `${requester.full_name} gave you ${score}/5 stars for order ${order_id}`,
+        read: false,
+        link: '/expert',
+        created_at: new Date().toISOString(),
+      });
     }
 
     res.status(201).json(record);

@@ -20,6 +20,7 @@ const WRITABLE_COLUMNS = [
   // Payment-after-delivery fields (proper columns, no more metadata hack)
   'agreed_price', 'preview_url', 'preview_name', 'payment_awaiting',
   'payment_method_type', 'crypto_discount_applied', 'delivery_released',
+  'payment_account',
   'expert_submission_url', 'expert_submission_name', 'admin_screenshots',
   // Revision & dispute fields
   'revision_deadline', 'revision_count', 'max_revisions',
@@ -88,7 +89,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     // Expert: fetch only unallocated orders + orders assigned to them
     // Use DB-level filtering to avoid fetching all orders
-    const expertName = requester.full_name;
+    const expertEmail = requester.email.toLowerCase();
     const { data: unallocated, error: err1 } = await db
       .from('orders')
       .select('*')
@@ -98,7 +99,7 @@ router.get('/', async (req: Request, res: Response) => {
     const { data: assigned, error: err2 } = await db
       .from('orders')
       .select('*')
-      .eq('assigned_to', expertName)
+      .eq('assigned_to', expertEmail)
       .order('created_at', { ascending: false });
 
     if (err1 || err2) {
@@ -322,11 +323,19 @@ router.put('/:orderId', async (req: Request, res: Response) => {
       const CLIENT_ALLOWED_FIELDS = [
         'description', 'special_instructions', 'budget_range', 'deadline',
         'service_type', 'subject', 'academic_level', 'file_url', 'file_name',
+        // Revision & dispute fields
+        'status', 'revision_count', 'revision_deadline', 'max_revisions',
+        'dispute_status', 'dispute_reason', 'dispute_created_at',
+        'dispute_resolved_at', 'dispute_resolution',
       ];
       for (const key of Object.keys(dbRecord)) {
         if (!CLIENT_ALLOWED_FIELDS.includes(key)) {
           delete dbRecord[key];
         }
+      }
+      // Clients can only set status to revision_requested or dispute_opened
+      if (dbRecord.status && !['revision_requested', 'dispute_opened'].includes(dbRecord.status)) {
+        delete dbRecord.status;
       }
     } else if (requester.role === 'expert') {
       const EXPERT_ALLOWED_FIELDS = [
@@ -375,7 +384,10 @@ router.put('/:orderId', async (req: Request, res: Response) => {
     if (dbRecord.status && dbRecord.status !== currentOrderData.status) {
       const order = currentOrderData as any;
       if (dbRecord.status === 'in_progress' && order.assigned_to) {
-        await createNotification(order.client_email, 'order_update', 'Order In Progress', `Your order ${orderId} is now being worked on by ${order.assigned_to}.`);
+        const { data: expProfile } = await db
+          .from('profiles').select('full_name').eq('email', order.assigned_to).maybeSingle();
+        const expName = (expProfile as any)?.full_name || order.assigned_to;
+        await createNotification(order.client_email, 'order_update', 'Order In Progress', `Your order ${orderId} is now being worked on by ${expName}.`);
       } else if (dbRecord.status === 'delivered') {
         await createNotification(order.client_email, 'order_delivered', 'Order Delivered', `Your order ${orderId} has been delivered. Please review and download.`);
       } else if (dbRecord.status === 'revision_requested') {
@@ -388,7 +400,11 @@ router.put('/:orderId', async (req: Request, res: Response) => {
     // Notify on expert assignment
     if (dbRecord.assigned_to && dbRecord.assigned_to !== currentOrderData.assigned_to) {
       const order = currentOrderData as any;
-      await createNotification(order.client_email, 'expert_assigned', 'Expert Assigned', `Expert ${dbRecord.assigned_to} has been assigned to your order ${orderId}.`);
+      // Look up expert display name for the notification
+      const { data: expertProfile } = await db
+        .from('profiles').select('full_name').eq('email', dbRecord.assigned_to).maybeSingle();
+      const expertDisplayName = (expertProfile as any)?.full_name || dbRecord.assigned_to;
+      await createNotification(order.client_email, 'expert_assigned', 'Expert Assigned', `Expert ${expertDisplayName} has been assigned to your order ${orderId}.`);
     }
 
     // Auto-create payment record when payment_status changes to 'approved'

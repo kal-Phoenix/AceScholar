@@ -101,6 +101,7 @@ router.post('/', async (req: Request, res: Response) => {
         payment_screenshot,
         payment_status: 'pending',
         payment_method: payment_method_type === 'crypto' ? 'crypto' : (payment_method_type || 'bank_transfer'),
+        payment_account: req.body.payment_account || null,
       }).eq('id', order_id);
       if (updateErr) return res.status(500).json({ error: 'Failed to update order' });
       return res.json({ success: true, status: 'pending' });
