@@ -42,8 +42,8 @@ export const DEFAULT_FALLBACK_COUNTRY = 'Ethiopia';
 export const DEFAULT_FALLBACK_CURRENCY = 'ETB';
 
 // Contact emails (from env)
-export const CONTACT_EMAIL = import.meta.env.VITE_CONTACT_EMAIL || 'contact@acescholar.com';
-export const DESK_EMAIL = import.meta.env.VITE_DESK_EMAIL || 'desk@acescholar.com';
+export const CONTACT_EMAIL = import.meta.env.VITE_CONTACT_EMAIL || 'ace.support1@gmail.com';
+export const DESK_EMAIL = import.meta.env.VITE_DESK_EMAIL || 'ace.support1@gmail.com';
 
 // Expert net earnings percentage (expert gets 90%)
 export const EXPERT_EARNINGS_PERCENT = 90;

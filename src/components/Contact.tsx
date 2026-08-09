@@ -84,7 +84,7 @@ export default function Contact() {
                   </div>
                   <div>
                     <span className="block font-semibold text-white">Email</span>
-                    <span className="text-slate-300 text-sm">{import.meta.env.VITE_DESK_EMAIL || 'desk@acescholar.com'}</span>
+                    <span className="text-slate-300 text-sm">{import.meta.env.VITE_DESK_EMAIL || 'ace.support1@gmail.com'}</span>
                   </div>
                 </div>
                 <div className="flex items-start space-x-4 text-sm">

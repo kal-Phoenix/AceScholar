@@ -16,6 +16,9 @@ import Expert from './components/Expert';
 import Order from './components/Order';
 import ForgotPassword from './components/ForgotPassword';
 import ResetPassword from './components/ResetPassword';
+import TermsOfService from './components/TermsOfService';
+import PrivacyPolicy from './components/PrivacyPolicy';
+import RefundPolicy from './components/RefundPolicy';
 import Footer from './components/Footer';
 import WhatsAppButton from './components/WhatsAppButton';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -357,6 +360,12 @@ export default function App() {
             showToast={showToast}
           />
         );
+      case 'terms-of-service':
+        return <TermsOfService setCurrentPage={handleSetPage} />;
+      case 'privacy-policy':
+        return <PrivacyPolicy setCurrentPage={handleSetPage} />;
+      case 'refund-policy':
+        return <RefundPolicy setCurrentPage={handleSetPage} />;
       default:
         return <Home setCurrentPage={handleSetPage} user={user} />;
     }

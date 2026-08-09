@@ -116,9 +116,9 @@ export default function Footer({ setCurrentPage }: FooterProps) {
               </li>
             </ul>
             <div className="pt-3 space-y-2.5">
-              <a href={`mailto:${import.meta.env.VITE_CONTACT_EMAIL || 'contact@acescholar.com'}`} className="flex items-center space-x-2 text-sm text-slate-300 hover:text-amber-500 transition-colors duration-200">
-                <Mail className="h-4 w-4 text-amber-500 shrink-0" />
-                <span>{import.meta.env.VITE_CONTACT_EMAIL || 'contact@acescholar.com'}</span>
+<a href={`mailto:${import.meta.env.VITE_CONTACT_EMAIL || 'ace.support1@gmail.com'}`} className="flex items-center space-x-2 text-sm text-slate-300 hover:text-amber-500 transition-colors duration-200">
+                <Mail className="w-4 h-4 text-amber-500 shrink-0" />
+                <span>{import.meta.env.VITE_CONTACT_EMAIL || 'ace.support1@gmail.com'}</span>
               </a>
             </div>
           </div>
@@ -134,17 +134,24 @@ export default function Footer({ setCurrentPage }: FooterProps) {
           </div>
           <div className="flex items-center gap-5">
             <button
-              onClick={() => handleNavClick('contact')}
+              onClick={() => handleNavClick('privacy-policy')}
               className="hover:text-amber-500 transition-colors duration-200 cursor-pointer"
             >
               Privacy Policy
             </button>
             <span className="text-slate-700">|</span>
             <button
-              onClick={() => handleNavClick('contact')}
+              onClick={() => handleNavClick('terms-of-service')}
               className="hover:text-amber-500 transition-colors duration-200 cursor-pointer"
             >
               Terms of Service
+            </button>
+            <span className="text-slate-700">|</span>
+            <button
+              onClick={() => handleNavClick('refund-policy')}
+              className="hover:text-amber-500 transition-colors duration-200 cursor-pointer"
+            >
+              Refund Policy
             </button>
             <button
               onClick={scrollToTop}

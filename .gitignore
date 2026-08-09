@@ -5,7 +5,9 @@ coverage/
 .DS_Store
 *.log
 .env
-.env.*
+.env.local
+.env.*.local
+!.env.example
 .freebuff/
 .freebuffdebug-server.log
 *.pem

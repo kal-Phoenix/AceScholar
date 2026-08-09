@@ -1,4 +1,4 @@
-export type PageType = 'home' | 'services' | 'pricing' | 'portfolio' | 'about' | 'contact' | 'login' | 'signup' | 'dashboard' | 'admin' | 'order' | 'expert' | 'forgot-password' | 'reset-password';
+export type PageType = 'home' | 'services' | 'pricing' | 'portfolio' | 'about' | 'contact' | 'login' | 'signup' | 'dashboard' | 'admin' | 'order' | 'expert' | 'forgot-password' | 'reset-password' | 'terms-of-service' | 'privacy-policy' | 'refund-policy';
 
 export interface Profile {
   id: string;

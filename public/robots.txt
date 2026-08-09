@@ -3,4 +3,4 @@ Allow: /
 Disallow: /api/
 Disallow: /admin/
 
-Sitemap: https://acescholar.com/sitemap.xml
+Sitemap: https://acescholar.fly.dev/sitemap.xml

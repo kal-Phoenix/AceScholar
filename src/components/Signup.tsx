@@ -213,7 +213,15 @@ export default function Signup({ setCurrentPage, showToast }: SignupProps) {
                   className="mt-0.5 rounded-lg text-amber-500 bg-slate-900 border-slate-800 focus:ring-amber-500 focus:ring-offset-0 h-4 w-4 shrink-0"
                 />
                 <span className="text-xs text-slate-400 select-none group-hover:text-slate-300 transition-colors leading-relaxed">
-                  I agree to the Terms of Service and understand that this is a premium academic assistance consult service. *
+                  I agree to the{' '}
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setCurrentPage('terms-of-service'); }}
+                    className="text-amber-500 hover:text-amber-400 underline cursor-pointer"
+                  >
+                    Terms of Service
+                  </button>{' '}
+                  and understand that this is a premium academic assistance consult service. *
                 </span>
               </label>
               {errors.agreeTerms && (
